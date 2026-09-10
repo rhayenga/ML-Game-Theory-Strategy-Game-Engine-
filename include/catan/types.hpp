@@ -1,5 +1,7 @@
 #pragma once
 
+// Shared constants, enums, and tiny name helpers.
+
 #include <cstdint>
 #include <string_view>
 
@@ -27,10 +29,10 @@ enum class DevType : uint8_t {
 };
 
 enum class Phase : uint8_t {
-  PreRoll,       // may play one development card, then must roll
-  Discard,       // after 7, players with >7 resource cards
-  RobberMove,    // place robber + steal
-  Main,          // trade / build / play one development card (if not already)
+  PreRoll,
+  Discard,
+  RobberMove,
+  Main,
   GameOver
 };
 
@@ -79,4 +81,4 @@ inline const char* player_name(Player p) {
   }
 }
 
-}  // namespace catan
+}
