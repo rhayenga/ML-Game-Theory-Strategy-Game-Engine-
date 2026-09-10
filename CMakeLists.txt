@@ -1,3 +1,5 @@
+# Optional CMake build for the Catan engine (Makefile is the main path).
+
 cmake_minimum_required(VERSION 3.20)
 project(catan_engine LANGUAGES CXX)
 
