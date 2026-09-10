@@ -1,4 +1,4 @@
-# Catan engine — clang++ build (no CMake required)
+# Build the Catan engine binaries and optional UI helper.
 CXX ?= clang++
 CXXFLAGS ?= -std=c++20 -O3 -Wall -Wextra -I include
 
