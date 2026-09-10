@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Train a PyTorch value net on self-play features; export eval_weights.json for the C++ engine.
+# PyTorch value-net training on C++ self-play features; writes eval_weights.json for the engine.
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ DEFAULT_SAMPLES = ROOT / "build" / "train_samples.jsonl"
 DEFAULT_WEIGHTS = ROOT / "build" / "eval_weights.json"
 DEFAULT_CKPT = ROOT / "build" / "value_net.pt"
 FEAT_DIM = 6
+DEFAULT_W = [6.0, 2.8, 0.5, 1.4, 1.5, 1.0]
 
 
 class ValueNet(nn.Module):
@@ -66,26 +67,30 @@ def sanitize_race_weights(w: list[float], scale: float) -> tuple[list[float], fl
     return w, scale
 
 
-def load_prior_weights(path: Path) -> list[float] | None:
-    if not path.exists():
-        return None
-    try:
-        data = json.loads(path.read_text())
-        w = data.get("w")
-        if isinstance(w, list) and len(w) == FEAT_DIM:
-            return [float(x) for x in w]
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
-        return None
-    return None
+def load_prior_weights(path: Path) -> list[float]:
+    if path.exists():
+        try:
+            data = json.loads(path.read_text())
+            w = data.get("w")
+            if isinstance(w, list) and len(w) == FEAT_DIM:
+                return [float(x) for x in w]
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+    return list(DEFAULT_W)
 
 
-def fit_linear_export(x: torch.Tensor, y: torch.Tensor, epochs: int, lr: float) -> list[float]:
-    # Linear head matches the C++ eval: score = sum(w_i * f_i).
+def fit_linear_export(
+    x: torch.Tensor, y: torch.Tensor, prior: list[float], epochs: int, lr: float
+) -> list[float]:
+    # Linear head matches the C++ eval: score = sum(w_i * f_i). Warm-start from prior.
     model = nn.Linear(FEAT_DIM, 1, bias=True)
+    with torch.no_grad():
+        model.weight.copy_(torch.tensor([prior], dtype=torch.float32))
+        model.bias.zero_()
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     loss_fn = nn.BCEWithLogitsLoss()
     ds = TensorDataset(x, y)
-    loader = DataLoader(ds, batch_size=min(512, len(x)), shuffle=True)
+    loader = DataLoader(ds, batch_size=min(512, max(1, len(x))), shuffle=True)
     model.train()
     for _ in range(epochs):
         for xb, yb in loader:
@@ -99,10 +104,8 @@ def fit_linear_export(x: torch.Tensor, y: torch.Tensor, epochs: int, lr: float) 
     return [float(v) for v in w]
 
 
-def export_weights(w: list[float], out_path: Path, scale: float, blend: float = 0.2) -> None:
-    prior = load_prior_weights(out_path)
-    if prior is not None:
-        w = [(1.0 - blend) * p + blend * n for p, n in zip(prior, w)]
+def export_weights(w: list[float], out_path: Path, prior: list[float], scale: float, blend: float) -> None:
+    w = [(1.0 - blend) * p + blend * n for p, n in zip(prior, w)]
     w, scale = sanitize_race_weights(w, scale)
     payload = {"w": w, "scale": scale, "source": "pytorch"}
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -140,13 +143,13 @@ def train(args: argparse.Namespace) -> None:
     torch.save({"model": model.state_dict(), "feat_dim": FEAT_DIM}, ckpt)
     print(f"saved checkpoint {ckpt}")
 
-    # Small sample dumps are noisy; keep C++ weights so short Train clicks stay safe.
-    if len(x) < 5000 and not args.force_export:
-        print(f"only {len(x)} samples (<5000) — keeping existing eval_weights.json (use --force-export to override)")
-        return
-
-    w = fit_linear_export(x, y, epochs=max(4, args.epochs // 2), lr=args.lr)
-    export_weights(w, Path(args.weights), scale=args.scale)
+    prior = load_prior_weights(Path(args.weights))
+    # More data → trust the fit more.
+    blend = 0.35 if len(x) < 3000 else (0.55 if len(x) < 15000 else 0.75)
+    if args.blend is not None:
+        blend = args.blend
+    w = fit_linear_export(x, y, prior, epochs=max(6, args.epochs), lr=args.lr)
+    export_weights(w, Path(args.weights), prior, scale=args.scale, blend=blend)
 
 
 def main() -> None:
@@ -154,15 +157,11 @@ def main() -> None:
     p.add_argument("--samples", default=str(DEFAULT_SAMPLES))
     p.add_argument("--weights", default=str(DEFAULT_WEIGHTS))
     p.add_argument("--checkpoint", default=str(DEFAULT_CKPT))
-    p.add_argument("--epochs", type=int, default=8)
+    p.add_argument("--epochs", type=int, default=10)
     p.add_argument("--batch-size", type=int, default=256)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--scale", type=float, default=5.0)
-    p.add_argument(
-        "--force-export",
-        action="store_true",
-        help="Overwrite eval_weights.json even with <5000 samples",
-    )
+    p.add_argument("--blend", type=float, default=None, help="Override prior/new blend in [0,1]")
     args = p.parse_args()
     if not Path(args.samples).exists():
         print(f"missing samples file: {args.samples}", file=sys.stderr)

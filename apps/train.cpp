@@ -22,7 +22,7 @@ static void print_help(const char* argv0) {
       << "  --help             Show this help\n"
       << "  --seed N           RNG seed (default 42)\n"
       << "  --epsilon X        Exploration rate 0..1 (default 0.15)\n"
-      << "  --lr X             Weight learn rate (default 0.05)\n"
+      << "  --lr X             C++ weight learn rate (0=samples only for PyTorch, default 0.05)\n"
       << "  --mcts N           MCTS sims per decision (0=fast one-ply, default 0)\n"
       << "  --weights PATH     Weights JSON in/out (default build/eval_weights.json)\n"
       << "  --stats PATH       Stats JSON out (default build/train_stats.json)\n"
@@ -30,12 +30,10 @@ static void print_help(const char* argv0) {
       << "Examples:\n"
       << "  " << argv0 << " 1000\n"
       << "  " << argv0 << " 100 --epsilon 0.2 --lr 0.08\n"
-      << "  " << argv0 << " 50 --mcts 40\n\n"
-      << "Optional PyTorch fit (same weights file the engine loads):\n"
-      << "  pip install -r ml/requirements.txt\n"
+      << "  " << argv0 << " 200 --lr 0   # self-play samples only; then:\n"
       << "  python3 ml/train_value.py\n\n"
-      << "After training, run: ./build/catan_advise  [sims] [player]\n"
-      << "The advisor auto-loads build/eval_weights.json when present.\n";
+      << "UI Train uses --lr 0 and always runs ml/train_value.py (PyTorch owns weights).\n"
+      << "After training: ./build/catan_advise  [sims] [player]\n";
 }
 
 int main(int argc, char** argv) {

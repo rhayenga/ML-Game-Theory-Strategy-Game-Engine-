@@ -210,8 +210,10 @@ int play_one_game(const RuleCtx& ctx, GameState state, const TrainConfig& cfg, T
     for (int p = 0; p < kNumPlayers; ++p) {
       stats.sum_vp[p] += total_vp(state, *ctx.topo, p);
     }
-    update_weights_from_trajectory(traj, state.winner, cfg.learn_rate);
-    update_weights_from_game(ctx, state, state.winner, cfg.learn_rate);
+    if (cfg.learn_rate > 0.0) {
+      update_weights_from_trajectory(traj, state.winner, cfg.learn_rate);
+      update_weights_from_game(ctx, state, state.winner, cfg.learn_rate);
+    }
 
     if (!cfg.samples_path.empty()) {
       std::ofstream samples_out(cfg.samples_path, std::ios::app);
@@ -317,8 +319,12 @@ TrainStats run_training(const RuleCtx& ctx, const BoardSpec& board, const Topolo
   std::cout << "Wrote position visits -> " << cfg.visits_path << " (" << visits.by_hash.size()
             << " positions)\n";
 
-  save_weights(active_weights(), cfg.weights_path);
-  std::cout << "Wrote weights -> " << cfg.weights_path << "\n";
+  if (cfg.learn_rate > 0.0) {
+    save_weights(active_weights(), cfg.weights_path);
+    std::cout << "Wrote weights -> " << cfg.weights_path << "\n";
+  } else {
+    std::cout << "Skipped C++ weight write (learn_rate=0; PyTorch owns eval_weights.json)\n";
+  }
 
   std::ofstream out(cfg.stats_path);
   if (out) {

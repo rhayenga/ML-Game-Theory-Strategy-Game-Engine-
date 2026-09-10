@@ -70,6 +70,13 @@ class TrainJob:
                 }
             if not TRAIN.exists():
                 return {"ok": False, "error": f"missing {TRAIN} — run make build/catan_train"}
+            if not TORCH_TRAIN.exists():
+                return {"ok": False, "error": f"missing {TORCH_TRAIN}"}
+            if not _torch_available():
+                return {
+                    "ok": False,
+                    "error": "PyTorch required for Train — run: make ui   (or pip install -r ml/requirements.txt in your venv)",
+                }
             self.running = True
             self.games = max(1, int(games))
             self.done = 0
@@ -77,6 +84,7 @@ class TrainJob:
             self.last_result = None
             self.log_tail = []
             seed = int.from_bytes(os.urandom(4), "little") or 1
+            # C++ self-play dumps samples + visit memory; lr=0 so PyTorch alone updates weights.
             cmd = [
                 str(TRAIN),
                 str(self.games),
@@ -85,7 +93,7 @@ class TrainJob:
                 "--epsilon",
                 "0.12",
                 "--lr",
-                "0.05",
+                "0",
                 "--weights",
                 "build/eval_weights.json",
                 "--stats",
@@ -108,27 +116,15 @@ class TrainJob:
                 "games": self.games,
                 "done": 0,
                 "seed": seed,
-                "message": f"Started {self.games} unique self-play games (seed {seed})",
+                "message": f"PyTorch train: {self.games} self-play games then value-net fit (seed {seed})",
             }
 
-    def _run_pytorch(self) -> bool:
-        if not TORCH_TRAIN.exists():
-            with self.lock:
-                self._append_log("PyTorch trainer missing — keeping C++ weights.")
-            return False
-        if not _torch_available():
-            with self.lock:
-                self._append_log(
-                    "PyTorch not installed — keeping C++ weights. Optional: pip install -r ml/requirements.txt"
-                )
-            return False
+    def _run_pytorch(self) -> None:
         samples = ROOT / "build" / "train_samples.jsonl"
         if not samples.exists() or samples.stat().st_size == 0:
-            with self.lock:
-                self._append_log("No feature samples — keeping C++ weights.")
-            return False
+            raise RuntimeError("No feature samples from self-play — cannot run PyTorch training")
         with self.lock:
-            self._append_log("Running PyTorch value-net fit…")
+            self._append_log("PyTorch value-net training…")
         cmd = [
             sys.executable,
             str(TORCH_TRAIN),
@@ -153,12 +149,10 @@ class TrainJob:
             with self.lock:
                 self._append_log(line)
         code = proc.wait()
+        if code != 0:
+            raise RuntimeError(f"PyTorch trainer exited with code {code}")
         with self.lock:
-            if code == 0:
-                self._append_log("PyTorch export done — eval_weights.json updated.")
-                return True
-            self._append_log(f"PyTorch step failed (exit {code}) — keeping C++ weights.")
-            return False
+            self._append_log("PyTorch training done — eval_weights.json + value_net.pt updated.")
 
     def _watch(self, proc: subprocess.Popen, games: int) -> None:
         assert proc.stdout
@@ -175,26 +169,35 @@ class TrainJob:
                         except (IndexError, ValueError):
                             pass
             code = proc.wait()
-            pytorch_ok = False
-            if code == 0:
-                pytorch_ok = self._run_pytorch()
+            if code != 0:
+                with self.lock:
+                    self.running = False
+                    self.error = f"self-play exited with code {code}"
+                return
+            try:
+                self._run_pytorch()
+            except Exception as e:
+                with self.lock:
+                    self.running = False
+                    self.done = games
+                    self.error = str(e)
+                    self._append_log(f"Training failed: {e}")
+                return
             with self.lock:
                 self.running = False
-                self.done = games if code == 0 else self.done
-                if code != 0:
-                    self.error = f"trainer exited with code {code}"
-                else:
-                    self.last_result = {
-                        "games": games,
-                        "weights": "build/eval_weights.json",
-                        "stats": "build/train_stats.json",
-                        "visits": "build/position_visits.json",
-                        "samples": "build/train_samples.jsonl",
-                        "pytorch": pytorch_ok,
-                    }
-                    self._append_log(
-                        "Training finished — positions saved. Click New game (or reload) to use them."
-                    )
+                self.done = games
+                self.last_result = {
+                    "games": games,
+                    "weights": "build/eval_weights.json",
+                    "checkpoint": "build/value_net.pt",
+                    "stats": "build/train_stats.json",
+                    "visits": "build/position_visits.json",
+                    "samples": "build/train_samples.jsonl",
+                    "pytorch": True,
+                }
+                self._append_log(
+                    "Training finished — PyTorch weights saved. Click New game (or reload) to use them."
+                )
         except Exception as e:
             with self.lock:
                 self.running = False

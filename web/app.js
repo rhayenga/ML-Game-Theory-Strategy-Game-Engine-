@@ -734,7 +734,7 @@ async function refreshTrainStatus() {
     if (!el) return;
     if (data.running) {
       el.classList.add("busy");
-      el.textContent = `Training… ${data.done}/${data.games} unique self-play games (learning weights)`;
+      el.textContent = `PyTorch training… self-play ${data.done}/${data.games}, then value-net fit`;
       if (btn) btn.disabled = true;
     } else if (data.error) {
       el.classList.remove("busy");
@@ -747,7 +747,7 @@ async function refreshTrainStatus() {
     } else if (data.last_result) {
       el.classList.remove("busy");
       el.textContent =
-        `Last train: ${data.last_result.games} unique games done. Memory updated — New game loads weights + positions.`;
+        `Last train: ${data.last_result.games} games + PyTorch value-net. New game loads updated weights.`;
       if (btn) btn.disabled = false;
       if (trainPoll) {
         clearInterval(trainPoll);

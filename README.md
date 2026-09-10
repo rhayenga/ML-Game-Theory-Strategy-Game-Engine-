@@ -9,15 +9,14 @@ A Settlers of Catan coaching engine: C++20 rules + eval + MCTS, with a local web
 - Legal-move engine with settlements, cities, roads, robber, maritime trade, and development cards
 - Heuristic evaluation + strategy bonuses (expand, awards, trades)
 - MCTS advice for your seat; imperfect one-ply opponents
-- Self-play training (C++ + optional PyTorch value-net export)
+- Self-play training via PyTorch value-net (C++ generates games; PyTorch updates weights)
 - **Game recap** on finish — VP breakdown, board pieces, and why the game swung
 
 ## Requirements
 
 - macOS or Linux
 - `clang++` (C++20) or compatible compiler
-- Python 3
-- Optional: PyTorch (`pip install -r ml/requirements.txt`) for value-net fitting after self-play
+- Python 3 with PyTorch (`make ui` installs it into `.venv`)
 
 ## Quick start
 
@@ -33,9 +32,7 @@ make ui
 
 That creates `.venv`, installs PyTorch, frees port 8765 if needed, and starts the UI. Open `http://127.0.0.1:8765/`.
 
-**Train** then uses PyTorch automatically. Play still works if torch install fails.
-
-Manual equivalent (do not copy `#` comments into the shell):
+**Train** runs C++ self-play to collect features, then **always** fits the PyTorch value net and writes `build/eval_weights.json`.
 
 ```bash
 cd ~/Desktop/Catan
@@ -53,7 +50,7 @@ PYTHONUNBUFFERED=1 python3 web/server.py
 | **Find top 3** | MCTS search for your seat |
 | **Play selected** | Apply a recommended move, then opponents act |
 | **Autoplay** | Follow #1 advice until the game ends |
-| **Train 1200** | Offline self-play to refresh weights / visit memory |
+| **Train 1200** | Self-play + PyTorch value-net update |
 
 ## Layout
 
