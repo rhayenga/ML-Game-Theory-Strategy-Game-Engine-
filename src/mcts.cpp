@@ -1,3 +1,5 @@
+// Monte Carlo tree search for move advice.
+
 #include "catan/mcts.hpp"
 
 #include "catan/strategy.hpp"
@@ -21,11 +23,10 @@ struct Node {
   std::vector<Action> untried;
   int visits = 0;
   double value_sum = 0;
-  double prior = 1.0;  // policy prior from self-play memory
+  double prior = 1.0;
   int to_move = 0;
 };
 
-// AlphaZero-style PUCT: Q + c * P * sqrt(N) / (1+n)
 double puct_score(const Node& child, int parent_visits, double c) {
   double q = child.visits ? (child.value_sum / child.visits) : 0.0;
   return q + c * child.prior * std::sqrt(static_cast<double>(parent_visits) + 1e-9) /
@@ -50,7 +51,6 @@ Node* select(Node* node, double c) {
 
 Node* expand(const RuleCtx& ctx, Node* node, const VisitStore* visits) {
   if (node->untried.empty()) return node;
-  // Assign priors for remaining untried from this state's empirical policy.
   uint64_t h = hash_position(node->state, *ctx.board);
   std::vector<Action> all = node->untried;
   for (const auto& ch : node->children) all.push_back(ch->action_from_parent);
@@ -67,7 +67,7 @@ Node* expand(const RuleCtx& ctx, Node* node, const VisitStore* visits) {
   if (act.type == ActionType::PlaceRobber || act.type == ActionType::PlayKnight) {
     int me = node->state.current;
     if (robber_hits_self(ctx, node->state, me, act.a)) {
-      child->prior = 1e-9;  // never explore self-block hexes
+      child->prior = 1e-9;
     } else {
       child->prior += 0.35 * std::max(0.0, robber_hex_score(ctx, node->state, me, act.a));
       if (act.b >= 0 && act.b < kNumPlayers)
@@ -149,7 +149,6 @@ std::vector<RankedAction> diversify_top(std::vector<RankedAction> ranked, int k)
 
   std::vector<RankedAction> out;
   std::array<uint8_t, 16> used{};
-  // Pass 1: one best move per action family (trade vs road vs settle…).
   for (const auto& r : ranked) {
     if (static_cast<int>(out.size()) >= k) break;
     int b = action_bucket(r.action);
@@ -157,7 +156,6 @@ std::vector<RankedAction> diversify_top(std::vector<RankedAction> ranked, int k)
     if (b >= 0 && b < 16) used[b] = 1;
     out.push_back(r);
   }
-  // Pass 2: fill remaining slots with next-best (may repeat a family).
   for (const auto& r : ranked) {
     if (static_cast<int>(out.size()) >= k) break;
     bool dup = false;
@@ -173,13 +171,11 @@ std::vector<RankedAction> diversify_top(std::vector<RankedAction> ranked, int k)
   return out;
 }
 
-// Build top-K by mixing three strategy lenses so recommendations aren't always the same line.
 std::vector<RankedAction> rank_from_root(Node& root_node, const RuleCtx& ctx, const GameState& root,
                                          int perspective, int k) {
   StrategyStyle primary = infer_strategy(ctx, root, perspective);
   StrategyStyle styles[3] = {StrategyStyle::OwsCities, StrategyStyle::WoodBrickRoad,
                              StrategyStyle::Balanced};
-  // Put inferred style first.
   for (int i = 0; i < 3; ++i) {
     if (styles[i] == primary) std::swap(styles[0], styles[i]);
   }
@@ -190,7 +186,6 @@ std::vector<RankedAction> rank_from_root(Node& root_node, const RuleCtx& ctx, co
        (root_node.children[0]->action_from_parent.type == ActionType::PlaceRobber ||
         root_node.children[0]->action_from_parent.type == ActionType::PlayKnight));
 
-  // Prefer enemy-only robber hexes whenever any exist.
   bool any_enemy_robber = false;
   for (auto& ch : root_node.children) {
     const auto& a = ch->action_from_parent;
@@ -208,10 +203,8 @@ std::vector<RankedAction> rank_from_root(Node& root_node, const RuleCtx& ctx, co
     const auto& act = ch->action_from_parent;
     if ((act.type == ActionType::PlaceRobber || act.type == ActionType::PlayKnight) &&
         any_enemy_robber && robber_hits_self(ctx, root, perspective, act.a)) {
-      continue;  // automatic no — don't even list self-hexes
+      continue;
     }
-    // Automatic no — purposeless bank trades must not appear in top-3.
-    // Skip only bad dumps; keep clear-goal (-0.3) and 8+ hand dumps (0).
     if (act.type == ActionType::MaritimeTrade &&
         maritime_trade_score(root, perspective, act.a, act.b, act.c) < -0.5) {
       continue;
@@ -223,12 +216,10 @@ std::vector<RankedAction> rank_from_root(Node& root_node, const RuleCtx& ctx, co
     r.value += 0.04 * (((ch->visits * 17 + perspective * 3) % 21) - 10) / 10.0;
     r.value += 0.08 * strategy_action_bonus(ctx, root, r.action, perspective, primary);
     if (r.action.type == ActionType::PlaceRobber || r.action.type == ActionType::PlayKnight) {
-      // Robber decisions are tactical — MCTS visit concentration on no-steal hexes is misleading.
       double rs = robber_hex_score(ctx, root, perspective, r.action.a);
       r.value = rs;
       if (r.action.b >= 0 && r.action.b < kNumPlayers)
         r.value += 0.55 * total_vp(root, *ctx.topo, r.action.b);
-      // Keep a little search signal as tie-break only.
       r.value += 0.02 * (ch->visits ? ch->value_sum / ch->visits : 0.0);
     }
     r.label = strategy_name(primary);
@@ -239,7 +230,6 @@ std::vector<RankedAction> rank_from_root(Node& root_node, const RuleCtx& ctx, co
     std::sort(pool.begin(), pool.end(),
               [](const RankedAction& a, const RankedAction& b) { return a.value > b.value; });
     if (static_cast<int>(pool.size()) > k) pool.resize(k);
-    // Fake visit shares from relative score so confidence isn't 98% on a garbage hex.
     double sum = 0;
     for (auto& r : pool) sum += std::max(0.05, r.value + 5.0);
     int visit_budget = 100;
@@ -271,7 +261,6 @@ std::vector<RankedAction> rank_from_root(Node& root_node, const RuleCtx& ctx, co
     }
   }
 
-  // For each style, pick its favorite unused action → naturally different lines of play.
   std::vector<RankedAction> out;
   std::array<uint8_t, 16> used_bucket{};
   for (int si = 0; si < 3 && static_cast<int>(out.size()) < k; ++si) {
@@ -324,7 +313,7 @@ std::vector<RankedAction> rank_from_root(Node& root_node, const RuleCtx& ctx, co
   return out;
 }
 
-}  // namespace
+}
 
 std::vector<RankedAction> search_top_actions(const RuleCtx& ctx, const GameState& root,
                                              int perspective, const MCTSConfig& cfg, int k) {
@@ -339,7 +328,6 @@ std::vector<RankedAction> search_top_actions(const RuleCtx& ctx, const GameState
     Node* node = select(&root_node, cfg.c_puct);
     Node* leaf = expand(ctx, node, cfg.visits);
     double v = rollout(ctx, leaf->state, perspective, cfg.rollout_depth, rng);
-    // Negamax-ish: value is always from root perspective already via evaluate(..., perspective).
     backup(leaf, v);
   }
 
@@ -364,7 +352,6 @@ std::vector<RankedAction> search_top_actions(const RuleCtx& ctx, const GameState
     child->parent = &root_node;
     child->prior = move_prior(cfg.visits, root_h, a, acts);
     child->visits = 1;
-    // Warm-start with value net + policy prior bonus (past ML moves).
     child->value_sum = evaluate(ctx, n, perspective) +
                        strategy_action_bonus(ctx, root, a, perspective, style) +
                        0.15 * std::log1p(child->prior * 40.0);
@@ -381,4 +368,4 @@ MCTSResult search_best_action(const RuleCtx& ctx, const GameState& root, int per
   return MCTSResult{top[0].action, top[0].value, top[0].visits};
 }
 
-}  // namespace catan
+}
