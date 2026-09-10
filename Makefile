@@ -9,7 +9,7 @@ OBJS = build/topology.o build/board.o build/state.o build/rules.o build/eval.o b
 all: build/catan_advise build/catan_train build/catan_bench build/catan_bridge
 
 ui: build/catan_bridge
-	python3 web/server.py
+	bash scripts/start_ui.sh
 
 build:
 	mkdir -p build

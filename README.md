@@ -23,30 +23,27 @@ A Settlers of Catan coaching engine: C++20 rules + eval + MCTS, with a local web
 
 **Project page:** [https://rhayenga.github.io/ML-Game-Theory-Strategy-Game-Engine-/](https://rhayenga.github.io/ML-Game-Theory-Strategy-Game-Engine-/)
 
-The playable coach runs on your machine (GitHub Pages is the project site, not the game server):
+Use this folder on your Desktop (`Desktop/Catan`), not an older clone under your home directory.
 
 ```bash
+cd ~/Desktop/Catan
 make -j4
-PYTHONUNBUFFERED=1 python3 web/server.py
+make ui
 ```
 
-Then open `http://127.0.0.1:8765/` in your browser.
+That creates `.venv`, installs PyTorch, frees port 8765 if needed, and starts the UI. Open `http://127.0.0.1:8765/`.
 
-Optional: `make ui` builds the bridge and starts the server.
+**Train** then uses PyTorch automatically. Play still works if torch install fails.
 
-### Optional PyTorch training
-
-Play/advise never depends on PyTorch. If torch is installed, **Train** runs C++ self-play, then `ml/train_value.py` exports `build/eval_weights.json` (engine sanitizes weights on load). Without torch, C++ weights alone are kept.
+Manual equivalent (do not copy `#` comments into the shell):
 
 ```bash
+cd ~/Desktop/Catan
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r ml/requirements.txt
-./build/catan_train 200   # dumps build/train_samples.jsonl
-python3 ml/train_value.py
+PYTHONUNBUFFERED=1 python3 web/server.py
 ```
-
-If you start the UI with the venv active, **Train** will run the PyTorch step automatically after self-play.
 
 ## Controls
 
