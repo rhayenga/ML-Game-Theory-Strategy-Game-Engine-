@@ -127,9 +127,12 @@ double maritime_trade_score(const GameState& s, int player, int give, int recv, 
   if (!unlocked_vp && !surplus) return -0.2;
 
   double score = unlock;
-  if (rate <= 3) {
-    if (need_recv || hs < 7) score += 0.3;
-    else score -= 0.1;
+  if (rate == 2) {
+    if (need_recv || hs < 7) score += 0.55;
+    else score += 0.15;
+  } else if (rate == 3) {
+    if (need_recv || hs < 7) score += 0.4;
+    else score += 0.05;
   }
   return score;
 }
@@ -275,6 +278,10 @@ double strategy_action_bonus(const RuleCtx& ctx, const GameState& s, const Actio
     b += 1.15;
     if (must_expand) b += 0.85;
     if (secure_lr || secure_la) b += 0.25;
+    if (a.a >= 0 && a.a < kNumVertices && ctx.board->port_at[a.a] != PortType::None) {
+      b += 0.4;
+      if (port_rate(ctx.board->port_at[a.a]) == 2) b += 0.15;
+    }
   }
   if (a.type == ActionType::BuildCity) {
     b += 1.55;

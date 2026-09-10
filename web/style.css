@@ -399,3 +399,15 @@ button.primary {
   font-size: 13px;
 }
 .hex-number.hot { fill: #8b1e1e; }
+.port-label {
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 700;
+  fill: #1a1208;
+}
+.port-res {
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 700;
+  fill: #f3ead2;
+}

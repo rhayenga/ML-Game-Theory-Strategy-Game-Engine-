@@ -54,6 +54,115 @@ function hexPolygon(cx, cy, size) {
   return pts.join(" ");
 }
 
+const PORT_FILL = {
+  brick: "#c47a4a",
+  lumber: "#2f7a4b",
+  ore: "#7a8794",
+  grain: "#d4b84a",
+  wool: "#7bbf5a",
+  "?": "#d8c9a0",
+};
+
+function renderWaterAndPorts(svg, ns, s) {
+  const ocean = document.createElementNS(ns, "polygon");
+  ocean.setAttribute("points", hexPolygon(0, 0, 268));
+  ocean.setAttribute("fill", "#2a6f8f");
+  ocean.setAttribute("stroke", "#1c4f66");
+  ocean.setAttribute("stroke-width", "3");
+  svg.appendChild(ocean);
+
+  const shallows = document.createElementNS(ns, "polygon");
+  shallows.setAttribute("points", hexPolygon(0, 0, 236));
+  shallows.setAttribute("fill", "#3d8aab");
+  shallows.setAttribute("opacity", "0.85");
+  svg.appendChild(shallows);
+
+  const frame = document.createElementNS(ns, "polygon");
+  frame.setAttribute("points", hexPolygon(0, 0, 205));
+  frame.setAttribute("fill", "none");
+  frame.setAttribute("stroke", "rgba(20, 55, 70, 0.55)");
+  frame.setAttribute("stroke-width", "14");
+  frame.setAttribute("stroke-linejoin", "round");
+  svg.appendChild(frame);
+
+  for (const p of s.ports || []) {
+    const mx = (p.x0 + p.x1) / 2;
+    const my = (p.y0 + p.y1) / 2;
+    const len = Math.hypot(mx, my) || 1;
+    const ox = mx / len;
+    const oy = my / len;
+    const pier = 18;
+    const dock = 34;
+
+    const g = document.createElementNS(ns, "g");
+    g.setAttribute("class", "port-dock");
+
+    for (const [x, y] of [
+      [p.x0, p.y0],
+      [p.x1, p.y1],
+    ]) {
+      const pierLine = document.createElementNS(ns, "line");
+      pierLine.setAttribute("x1", x);
+      pierLine.setAttribute("y1", y);
+      pierLine.setAttribute("x2", x + ox * pier);
+      pierLine.setAttribute("y2", y + oy * pier);
+      pierLine.setAttribute("stroke", "#8b6914");
+      pierLine.setAttribute("stroke-width", "3.2");
+      pierLine.setAttribute("stroke-linecap", "round");
+      g.appendChild(pierLine);
+    }
+
+    const shipX = mx + ox * dock;
+    const shipY = my + oy * dock;
+    const boat = document.createElementNS(ns, "ellipse");
+    boat.setAttribute("cx", shipX);
+    boat.setAttribute("cy", shipY);
+    boat.setAttribute("rx", "11");
+    boat.setAttribute("ry", "7");
+    boat.setAttribute("fill", "#5c4030");
+    boat.setAttribute("stroke", "#2a1a10");
+    boat.setAttribute("stroke-width", "1.2");
+    g.appendChild(boat);
+
+    const badge = document.createElementNS(ns, "circle");
+    badge.setAttribute("cx", shipX);
+    badge.setAttribute("cy", shipY - 12);
+    badge.setAttribute("r", "10");
+    badge.setAttribute("fill", PORT_FILL[p.resource] || PORT_FILL["?"]);
+    badge.setAttribute("stroke", "#1a1208");
+    badge.setAttribute("stroke-width", "1.2");
+    g.appendChild(badge);
+
+    const label = document.createElementNS(ns, "text");
+    label.setAttribute("x", shipX);
+    label.setAttribute("y", shipY - 8.5);
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("class", "port-label");
+    label.textContent = p.rate === 2 ? "2:1" : "3:1";
+    g.appendChild(label);
+
+    if (p.resource && p.resource !== "?") {
+      const tiny = document.createElementNS(ns, "text");
+      tiny.setAttribute("x", shipX);
+      tiny.setAttribute("y", shipY + 3);
+      tiny.setAttribute("text-anchor", "middle");
+      tiny.setAttribute("class", "port-res");
+      tiny.textContent = p.resource[0].toUpperCase();
+      g.appendChild(tiny);
+    } else {
+      const q = document.createElementNS(ns, "text");
+      q.setAttribute("x", shipX);
+      q.setAttribute("y", shipY + 3.5);
+      q.setAttribute("text-anchor", "middle");
+      q.setAttribute("class", "port-res");
+      q.textContent = "?";
+      g.appendChild(q);
+    }
+
+    svg.appendChild(g);
+  }
+}
+
 function selectedAction() {
   if (!topMoves.length) return lastAdvice;
   return topMoves[selectedIdx]?.action || lastAdvice;
@@ -66,12 +175,7 @@ function renderBoard(s) {
 
   const size = 42;
 
-  const bg = document.createElementNS(ns, "circle");
-  bg.setAttribute("cx", "0");
-  bg.setAttribute("cy", "0");
-  bg.setAttribute("r", "250");
-  bg.setAttribute("fill", "rgba(45, 95, 88, 0.45)");
-  svg.appendChild(bg);
+  renderWaterAndPorts(svg, ns, s);
 
   for (const h of s.hexes) {
     const g = document.createElementNS(ns, "g");
@@ -138,9 +242,15 @@ function renderBoard(s) {
     const c = document.createElementNS(ns, "circle");
     c.setAttribute("cx", v.x);
     c.setAttribute("cy", v.y);
-    c.setAttribute("r", "3.2");
-    c.setAttribute("fill", "rgba(60,45,30,0.18)");
-    c.setAttribute("stroke", "rgba(40,28,18,0.4)");
+    c.setAttribute("r", v.port && v.port !== "none" ? "4.2" : "3.2");
+    c.setAttribute(
+      "fill",
+      v.port && v.port !== "none" ? "rgba(232, 155, 45, 0.35)" : "rgba(60,45,30,0.18)"
+    );
+    c.setAttribute(
+      "stroke",
+      v.port && v.port !== "none" ? "rgba(232,155,45,0.85)" : "rgba(40,28,18,0.4)"
+    );
     c.setAttribute("stroke-width", "1");
     svg.appendChild(c);
   }

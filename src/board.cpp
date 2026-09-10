@@ -55,6 +55,16 @@ void attach_port_near(BoardSpec& b, const Topology& topo, int land_hex, PortType
   set_port_edge(b, topo, topo.edge_vertices[best_e][0], topo.edge_vertices[best_e][1], pt);
 }
 
+void place_ports_fixed_slots(BoardSpec& b, const Topology& topo,
+                             const std::array<PortType, 9>& types) {
+  const struct {
+    int hex;
+    int prefer;
+  } slots[9] = {{0, 3},  {1, -1}, {2, -1}, {6, 11}, {11, 15},
+                {17, 18}, {16, -1}, {7, -1}, {3, 7}};
+  for (int i = 0; i < 9; ++i) attach_port_near(b, topo, slots[i].hex, types[i], slots[i].prefer);
+}
+
 }
 
 BoardSpec beginner_board(const Topology& topo) {
@@ -79,15 +89,10 @@ BoardSpec beginner_board(const Topology& topo) {
     b.hexes[i] = HexSpec{terr[i], nums[i]};
   }
 
-  attach_port_near(b, topo, 0, PortType::Lumber2, 3);
-  attach_port_near(b, topo, 1, PortType::Wool2, -1);
-  attach_port_near(b, topo, 2, PortType::Grain2, -1);
-  attach_port_near(b, topo, 6, PortType::Generic3, 11);
-  attach_port_near(b, topo, 11, PortType::Brick2, 15);
-  attach_port_near(b, topo, 17, PortType::Generic3, 18);
-  attach_port_near(b, topo, 16, PortType::Ore2, -1);
-  attach_port_near(b, topo, 7, PortType::Generic3, -1);
-  attach_port_near(b, topo, 3, PortType::Generic3, 7);
+  place_ports_fixed_slots(b, topo,
+                          {PortType::Lumber2, PortType::Wool2, PortType::Grain2, PortType::Generic3,
+                           PortType::Brick2, PortType::Generic3, PortType::Ore2, PortType::Generic3,
+                           PortType::Generic3});
 
   b.placements = {{
       Placement{Player::Red, {1, 4, 5}, {1, 2, 5}, false, false},
@@ -185,23 +190,9 @@ BoardSpec random_board(const Topology& topo, uint32_t& rng) {
                                  PortType::Generic3, PortType::Brick2,   PortType::Lumber2,
                                  PortType::Ore2,     PortType::Grain2,   PortType::Wool2};
   shuffle(ports, rng);
-  std::vector<int> coastal_edges;
-  for (int e = 0; e < kNumEdges; ++e) {
-    if (topo.edge_hex_count[e] == 1) coastal_edges.push_back(e);
-  }
-  shuffle(coastal_edges, rng);
-  int pi = 0;
-  std::array<uint8_t, kNumVertices> port_used{};
-  for (int e : coastal_edges) {
-    if (pi >= static_cast<int>(ports.size())) break;
-    int v0 = topo.edge_vertices[e][0];
-    int v1 = topo.edge_vertices[e][1];
-    if (port_used[v0] || port_used[v1]) continue;
-    b.port_at[v0] = ports[pi];
-    b.port_at[v1] = ports[pi];
-    port_used[v0] = port_used[v1] = 1;
-    ++pi;
-  }
+  std::array<PortType, 9> slotted{};
+  for (int i = 0; i < 9; ++i) slotted[i] = ports[i];
+  place_ports_fixed_slots(b, topo, slotted);
 
   std::array<Player, 8> order = {Player::Red,    Player::White,  Player::Orange, Player::Blue,
                                  Player::Blue,   Player::Orange, Player::White,  Player::Red};

@@ -38,6 +38,18 @@ const char* terrain_name(Terrain t) {
   }
 }
 
+const char* port_type_name(PortType p) {
+  switch (p) {
+    case PortType::Generic3: return "generic3";
+    case PortType::Brick2: return "brick2";
+    case PortType::Lumber2: return "lumber2";
+    case PortType::Ore2: return "ore2";
+    case PortType::Grain2: return "grain2";
+    case PortType::Wool2: return "wool2";
+    default: return "none";
+  }
+}
+
 const char* phase_name(Phase p) {
   switch (p) {
     case Phase::PreRoll: return "pre_roll";
@@ -330,8 +342,38 @@ std::string state_to_json(const RuleCtx& ctx, const GameState& s, int you) {
       << "\"x\":" << vx[v] << ","
       << "\"y\":" << vy[v] << ","
       << "\"owner\":" << owner << ","
-      << "\"city\":" << city
+      << "\"city\":" << city << ","
+      << "\"port\":\"" << port_type_name(ctx.board->port_at[v]) << "\""
       << "}";
+  }
+  o << "],";
+
+  o << "\"ports\":[";
+  {
+    bool first = true;
+    std::array<uint8_t, kNumEdges> seen{};
+    for (int e = 0; e < kNumEdges; ++e) {
+      if (ctx.topo->edge_hex_count[e] != 1) continue;
+      int v0 = ctx.topo->edge_vertices[e][0];
+      int v1 = ctx.topo->edge_vertices[e][1];
+      PortType pt = ctx.board->port_at[v0];
+      if (pt == PortType::None || ctx.board->port_at[v1] != pt) continue;
+      if (seen[e]) continue;
+      seen[e] = 1;
+      if (!first) o << ",";
+      first = false;
+      int rate = port_rate(pt);
+      Resource pr = port_resource(pt);
+      o << "{"
+        << "\"edge\":" << e << ","
+        << "\"v0\":" << v0 << ",\"v1\":" << v1 << ","
+        << "\"x0\":" << vx[v0] << ",\"y0\":" << vy[v0] << ","
+        << "\"x1\":" << vx[v1] << ",\"y1\":" << vy[v1] << ","
+        << "\"type\":\"" << port_type_name(pt) << "\","
+        << "\"rate\":" << rate << ","
+        << "\"resource\":\"" << (pr == Resource::None ? "?" : resource_name(pr)) << "\""
+        << "}";
+    }
   }
   o << "],";
 
