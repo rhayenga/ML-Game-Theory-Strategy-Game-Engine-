@@ -1,3 +1,5 @@
+// Self-play training and weight updates.
+
 #include "catan/train.hpp"
 
 #include "catan/state.hpp"
@@ -139,7 +141,6 @@ void update_weights_from_game(const RuleCtx& ctx, const GameState& final_state, 
   clamp_race_weights(W);
 }
 
-// Temporal-difference / policy-gradient style update along the trajectory (PyTorch vibe).
 void update_weights_from_trajectory(
     const std::vector<std::pair<int, std::array<double, kEvalDim>>>& traj, int winner, double lr) {
   if (winner < 0 || traj.empty()) return;
@@ -152,21 +153,19 @@ void update_weights_from_trajectory(
     for (int i = 0; i < kEvalDim; ++i) {
       W.w[i] += lr * 0.15 * advantage * feat[i];
     }
-    G *= 0.985;  // discount toward earlier decisions
+    G *= 0.985;
   }
   clamp_race_weights(W);
 }
 
-}  // namespace
+}
 
 int play_one_game(const RuleCtx& ctx, GameState state, const TrainConfig& cfg, TrainStats& stats,
                   uint32_t& rng, VisitStore* visits) {
-  // Randomize seat personas each game so self-play explores different metas.
   std::array<StrategyStyle, kNumPlayers> personas{};
   for (int i = 0; i < kNumPlayers; ++i) {
     personas[i] = static_cast<StrategyStyle>(xorshift(rng) % 3);
   }
-  // Guarantee at least two different styles at the table.
   if (personas[0] == personas[1] && personas[1] == personas[2] && personas[2] == personas[3]) {
     personas[1] = StrategyStyle::WoodBrickRoad;
     personas[2] = StrategyStyle::OwsCities;
@@ -198,7 +197,6 @@ int play_one_game(const RuleCtx& ctx, GameState state, const TrainConfig& cfg, T
     if (ti >= 0 && ti < 16) stats.action_counts[ti]++;
     stats.total_actions++;
     apply_action(ctx, state, a);
-    // Experience replay feature snapshot after the move (value-net training signal).
     if (a.type != ActionType::Roll && a.type != ActionType::Discard) {
       traj.push_back({actor, player_features(ctx, state, actor)});
     }
@@ -229,7 +227,6 @@ TrainStats run_training(const RuleCtx& ctx, const BoardSpec& board, const Topolo
   TrainStats stats{};
   uint32_t rng = cfg.seed ? cfg.seed : 0xCA7A12u;
 
-  // Load existing weights if present
   EvalWeights w = active_weights();
   if (load_weights(w, cfg.weights_path)) {
     set_active_weights(w);
@@ -244,8 +241,6 @@ TrainStats run_training(const RuleCtx& ctx, const BoardSpec& board, const Topolo
   std::cout << "Position memory: " << visits.by_hash.size() << " known positions ("
             << cfg.visits_path << ")\n";
 
-  // Broad board pool: many distinct openings; each still gets enough reps for priors.
-  // prior ≈ games / pool_size (New Game draws from these + occasional fresh layouts).
   const char* seed_path = "build/board_seeds.txt";
   constexpr int kTargetPerOpening = 80;
   constexpr int kMaxPool = 36;
@@ -254,7 +249,6 @@ TrainStats run_training(const RuleCtx& ctx, const BoardSpec& board, const Topolo
 
   std::vector<uint32_t> loaded = load_board_seeds(seed_path);
   std::vector<uint32_t> pool;
-  // Never shrink an existing trained pool on a short retrain.
   int keep = std::max(target_pool, std::min(kMaxPool, static_cast<int>(loaded.size())));
   for (uint32_t s : loaded) {
     if (static_cast<int>(pool.size()) >= keep) break;
@@ -307,7 +301,6 @@ TrainStats run_training(const RuleCtx& ctx, const BoardSpec& board, const Topolo
   save_weights(active_weights(), cfg.weights_path);
   std::cout << "Wrote weights -> " << cfg.weights_path << "\n";
 
-  // Stats JSON
   std::ofstream out(cfg.stats_path);
   if (out) {
     out << "{\n  \"games\": " << stats.games << ",\n  \"finished\": " << stats.finished << ",\n";
@@ -340,4 +333,4 @@ TrainStats run_training(const RuleCtx& ctx, const BoardSpec& board, const Topolo
   return stats;
 }
 
-}  // namespace catan
+}
