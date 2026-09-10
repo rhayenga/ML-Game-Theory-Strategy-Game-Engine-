@@ -44,4 +44,4 @@ struct VisitStore {
 double move_prior(const VisitStore* visits, uint64_t h, const Action& a,
                   const std::vector<Action>& legal);
 
-}  // namespace catan
+}

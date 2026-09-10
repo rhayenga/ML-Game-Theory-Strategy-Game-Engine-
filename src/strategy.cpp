@@ -78,7 +78,7 @@ int best_rival_army(const GameState& s, int player) {
   return best;
 }
 
-}  // namespace
+}
 
 double maritime_trade_score(const GameState& s, int player, int give, int recv, int rate) {
   const auto& hand = s.players[player];
