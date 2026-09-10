@@ -1,3 +1,5 @@
+// Quick eval / apply throughput microbenchmark.
+
 #include "catan/board.hpp"
 #include "catan/eval.hpp"
 #include "catan/rules.hpp"
@@ -26,7 +28,6 @@ int main() {
   std::cout << "Evaluated " << N << " states in " << ms << " ms ("
             << (N / (ms / 1000.0)) << " eval/sec) sink=" << sink << "\n";
 
-  // Apply-move throughput: roll + end turn loop
   GameState g = state;
   t0 = std::chrono::steady_clock::now();
   int applied = 0;
