@@ -1,3 +1,5 @@
+// Position hashing and visit/prior storage.
+
 #include "catan/visits.hpp"
 
 #include "catan/json_api.hpp"
@@ -17,13 +19,9 @@ void mix(uint64_t& h, uint64_t v) {
   h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
 }
 
-}  // namespace
+}
 
 uint64_t hash_position(const GameState& s, const BoardSpec& board) {
-  // Structural fingerprint only: board layout + pieces + turn/awards.
-  // Excludes exact hands, bank, and shuffled deck so the same board state keeps
-  // accumulating "prior games" across rolls/trades (otherwise priors die to 0
-  // after the first dice roll).
   uint64_t h = 0xcbf29ce484222325ULL;
   for (int i = 0; i < kNumHexes; ++i) {
     mix(h, static_cast<uint64_t>(board.hexes[i].terrain));
@@ -62,7 +60,6 @@ bool VisitStore::load(const std::string& p) {
   buf << in.rdbuf();
   std::string s = buf.str();
   by_hash.clear();
-  // Minimal parse: "HASH":{"v":N,"m":{"KEY":V,...}}
   size_t i = 0;
   while (i < s.size()) {
     auto q1 = s.find('"', i);
@@ -70,7 +67,6 @@ bool VisitStore::load(const std::string& p) {
     auto q2 = s.find('"', q1 + 1);
     if (q2 == std::string::npos) break;
     std::string key = s.substr(q1 + 1, q2 - q1 - 1);
-    // skip non-hex keys like "positions"
     bool hexish = !key.empty();
     for (char c : key) {
       if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
@@ -109,7 +105,6 @@ bool VisitStore::load(const std::string& p) {
       if (col != std::string::npos)
         st.game_seen = std::strtoull(block.c_str() + col + 1, nullptr, 10);
     } else {
-      // Legacy files: treat old v as game_seen if small, else 0.
       st.game_seen = (st.visits < 1000) ? st.visits : 0;
     }
     auto mp = block.find("\"m\"");
@@ -224,7 +219,6 @@ double move_prior(const VisitStore* visits, uint64_t h, const Action& a,
   }
   auto it = st->moves.find(action_key(a));
   int v = (it != st->moves.end()) ? it->second.visits : 0;
-  // Laplace smoothing — AlphaZero-style prior from empirical policy.
   return (static_cast<double>(v) + 1.0) / (static_cast<double>(total) + n);
 }
 
@@ -234,4 +228,4 @@ uint64_t VisitStore::total_position_hits() const {
   return sum;
 }
 
-}  // namespace catan
+}
