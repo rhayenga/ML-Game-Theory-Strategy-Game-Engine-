@@ -1,3 +1,5 @@
+// Interactive turn-by-turn Catan coach CLI.
+
 #include "catan/board.hpp"
 #include "catan/eval.hpp"
 #include "catan/mcts.hpp"
@@ -91,7 +93,7 @@ static Action pick_fast(const RuleCtx& ctx, const GameState& s, int perspective)
     GameState n = s;
     apply_action(ctx, n, a);
     double v = evaluate(ctx, n, perspective);
-    if (a.type == ActionType::EndTurn) v -= 0.02;  // slight prefer doing something
+    if (a.type == ActionType::EndTurn) v -= 0.02;
     if (v > best_v) {
       best_v = v;
       best = a;
@@ -107,7 +109,7 @@ static void wait_enter(const std::string& prompt) {
 }
 
 int main(int argc, char** argv) {
-  int you = 0;  // Red
+  int you = 0;
   int your_sims = 400;
   int max_steps = 2000;
   std::string weights_path = "build/eval_weights.json";
@@ -133,7 +135,6 @@ int main(int argc, char** argv) {
     else if (a == "--sims" && i + 1 < argc) your_sims = std::stoi(argv[++i]);
     else if (a == "--weights" && i + 1 < argc) weights_path = argv[++i];
     else if (a[0] != '-') {
-      // backward compat: first positional = sims
       your_sims = std::stoi(a);
     }
   }
@@ -186,13 +187,11 @@ int main(int argc, char** argv) {
       break;
     }
 
-    // Discard phase can involve any player; treat as "your" decision if you must discard.
     bool your_decision = false;
     if (state.phase == Phase::Discard) {
       for (int p = 0; p < kNumPlayers; ++p) {
         if ((state.discard_left & (1u << p)) && p == you) your_decision = true;
       }
-      // Engine still applies discards via legal_actions which targets one player at a time.
       if (!your_decision && acts[0].type == ActionType::Discard && acts[0].a != you) {
         apply_action(ctx, state, acts[0]);
         continue;
@@ -227,7 +226,6 @@ int main(int argc, char** argv) {
       if (result.best.type == ActionType::Roll && state.last_roll)
         std::cout << "  Dice came up: " << int(state.last_roll) << "\n";
     } else {
-      // Opponent / auto
       int actor = state.current;
       Action move = pick_fast(ctx, state, actor);
       if (state.phase == Phase::Discard && acts[0].type == ActionType::Discard)
@@ -237,7 +235,6 @@ int main(int argc, char** argv) {
                 << explain_action(move) << "\n";
       apply_action(ctx, state, move);
       if (move.type == ActionType::EndTurn && state.current == you) {
-        // about to become your turn again after others finish
       }
     }
   }
