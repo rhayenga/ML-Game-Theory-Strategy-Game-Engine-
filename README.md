@@ -50,8 +50,6 @@ build/         Objects, binaries, optional weights JSON
 ```
 
 ## Notes
-
-- Opponent strength is intentionally soft (imperfect play + resource patience).
 - `build/eval_weights.json` can be committed as a starting point; large `position_visits.json` is gitignored — regenerate via Train if you want memory.
 
 ## License
