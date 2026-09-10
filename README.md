@@ -1,6 +1,6 @@
 # Catan Coach
 
-A Settlers of Catan coaching engine: C++20 rules + eval + MCTS, with a local web UI that recommends top moves and can autoplay against soft opponent bots.
+A Settlers of Catan coaching engine: C++20 rules + eval + MCTS, with a local web UI that recommends top moves and can autoplay against opponent bots.
 
 > Unofficial fan / research project — not affiliated with Catan Studio or Asmodee.
 
@@ -50,8 +50,6 @@ build/         Objects, binaries, optional weights JSON
 ```
 
 ## Notes
-
-- Opponent strength is intentionally soft (imperfect play + resource patience).
 - `build/eval_weights.json` can be committed as a starting point; large `position_visits.json` is gitignored — regenerate via Train if you want memory.
 
 ## License
