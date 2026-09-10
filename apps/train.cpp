@@ -1,3 +1,5 @@
+// Self-play trainer CLI (weights + visit memory).
+
 #include "catan/board.hpp"
 #include "catan/eval.hpp"
 #include "catan/topology.hpp"
