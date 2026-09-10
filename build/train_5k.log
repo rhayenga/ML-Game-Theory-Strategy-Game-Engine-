@@ -1,0 +1,44 @@
+Catan train: 5000 games, epsilon=0.12, lr=0.06, mcts=0
+Loaded weights from build/eval_weights.json
+  game 500/5000 finished=459 wins=[36,49,197,177]
+  game 1000/5000 finished=924 wins=[75,106,389,354]
+  game 1500/5000 finished=1384 wins=[117,170,595,502]
+  game 2000/5000 finished=1835 wins=[162,214,808,651]
+  game 2500/5000 finished=2302 wins=[203,273,1022,804]
+  game 3000/5000 finished=2769 wins=[231,334,1219,985]
+  game 3500/5000 finished=3244 wins=[278,394,1431,1141]
+  game 4000/5000 finished=3715 wins=[328,450,1625,1312]
+  game 4500/5000 finished=4173 wins=[363,514,1824,1472]
+  game 5000/5000 finished=4630 wins=[404,571,2031,1624]
+Wrote weights -> build/eval_weights.json
+Wrote stats -> build/train_stats.json
+
+=== Summary ===
+Games: 5000  finished: 4630
+  Red: wins=404 (8.7257%) avgVP=6.0362
+  White: wins=571 (12.3326%) avgVP=5.5452
+  Orange: wins=2031 (43.8661%) avgVP=8.182
+  Blue: wins=1624 (35.0756%) avgVP=7.8748
+Weights: 11.8292 3.02598 0.614595 10.6832 11.6681 0.510889  scale=6
+Catan train: 10000 games, epsilon=0.1, lr=0.05, mcts=0
+Loaded weights from build/eval_weights.json
+  game 1000/10000 finished=923 wins=[83,122,392,326]
+  game 2000/10000 finished=1851 wins=[137,228,808,678]
+  game 3000/10000 finished=2774 wins=[211,337,1228,998]
+  game 4000/10000 finished=3697 wins=[271,436,1640,1350]
+  game 5000/10000 finished=4626 wins=[351,550,2060,1665]
+  game 6000/10000 finished=5540 wins=[435,651,2463,1991]
+  game 7000/10000 finished=6474 wins=[511,780,2860,2323]
+  game 8000/10000 finished=7398 wins=[572,908,3247,2671]
+  game 9000/10000 finished=8320 wins=[652,1034,3593,3041]
+  game 10000/10000 finished=9259 wins=[733,1140,4031,3355]
+Wrote weights -> build/eval_weights.json
+Wrote stats -> build/train_stats.json
+
+=== Summary ===
+Games: 10000  finished: 9259
+  Red: wins=733 (7.91662%) avgVP=5.9592
+  White: wins=1140 (12.3123%) avgVP=5.4803
+  Orange: wins=4031 (43.536%) avgVP=8.1698
+  Blue: wins=3355 (36.235%) avgVP=7.9296
+Weights: 12 3.13425 0.674488 10.5203 11.5895 0.360205  scale=6

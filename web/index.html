@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Catan Coach</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <div class="brand">
+        <span class="mark">⬡</span>
+        <div>
+          <h1>Catan Coach</h1>
+          <p>Self-play + community strategies · imperfect opponents</p>
+        </div>
+      </div>
+      <div class="controls">
+        <label>You play
+          <select id="seat">
+            <option value="0">Red</option>
+            <option value="1">White</option>
+            <option value="2">Orange</option>
+            <option value="3">Blue</option>
+          </select>
+        </label>
+        <button id="newGame" class="primary">New game</button>
+        <button id="trainBtn" type="button">Train 1000</button>
+      </div>
+    </header>
+    <p id="trainStatus" class="train-status">ML training: idle — click Train 1000 to run unique self-play games.</p>
+
+    <main class="grid">
+      <section class="board-panel">
+        <svg id="board" viewBox="-320 -280 640 560" aria-label="Catan board"></svg>
+        <div id="toast" class="toast hidden"></div>
+      </section>
+
+      <aside class="side">
+        <div class="card advice" id="adviceCard">
+          <h2>Top 3 moves</h2>
+          <p class="hint">Pick one of the top 3. Confidence = how often the engine preferred that move in this search.</p>
+          <p id="strategyTag" class="strategy-tag">Strategy: —</p>
+          <p id="visitTag" class="meta">Same position in prior games: —</p>
+          <div id="topList" class="top-list"></div>
+          <div class="row">
+            <button id="think" class="primary" disabled>Find top 3</button>
+            <button id="playRec" disabled>Play selected</button>
+          </div>
+          <div class="row" style="margin-top:0.5rem">
+            <button id="autoFull" disabled>Slow autoplay</button>
+            <button id="autoStop" disabled>Stop</button>
+          </div>
+          <p id="meta" class="meta"></p>
+        </div>
+
+        <div class="card opp-card" id="oppCard">
+          <h2>What opponents just did</h2>
+          <ul id="oppLog" class="opp-log">
+            <li class="muted">Opponent moves show here before your next turn.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h2>Your hand</h2>
+          <div id="hand" class="hand"></div>
+          <p id="phase" class="meta"></p>
+        </div>
+
+        <div class="card">
+          <h2>Scores</h2>
+          <ul id="scores" class="scores"></ul>
+          <button id="autoPlay" disabled>Play opponents</button>
+        </div>
+
+        <div class="card log-card">
+          <h2>Log</h2>
+          <ul id="log" class="log"></ul>
+        </div>
+      </aside>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

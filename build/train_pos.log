@@ -1,0 +1,24 @@
+Catan train: 2000 games, epsilon=0.15, lr=0.05, mcts=0
+Loaded weights from build/eval_weights.json
+Position memory: 36 known positions (build/position_visits.json)
+  game 200/2000 finished=200 wins=[30,36,77,57]
+  game 400/2000 finished=400 wins=[65,63,164,108]
+  game 600/2000 finished=600 wins=[96,93,246,165]
+  game 800/2000 finished=800 wins=[129,119,333,219]
+  game 1000/2000 finished=1000 wins=[158,144,411,287]
+  game 1200/2000 finished=1200 wins=[178,176,507,339]
+  game 1400/2000 finished=1400 wins=[198,206,605,391]
+  game 1600/2000 finished=1600 wins=[224,239,692,445]
+  game 1800/2000 finished=1800 wins=[258,260,767,515]
+  game 2000/2000 finished=2000 wins=[283,289,861,567]
+Wrote position visits -> build/position_visits.json (806468 positions)
+Wrote weights -> build/eval_weights.json
+Wrote stats -> build/train_stats.json
+
+=== Summary ===
+Games: 2000  finished: 2000
+  Red: wins=283 (14.15%) avgVP=6.4615
+  White: wins=289 (14.45%) avgVP=6.212
+  Orange: wins=861 (43.05%) avgVP=8.3625
+  Blue: wins=567 (28.35%) avgVP=7.6295
+Weights: 11.9216 5.05648 1.55512 11.3473 9.9636 1.36191  scale=6
