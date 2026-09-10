@@ -1,3 +1,5 @@
+// Serialize game state and explain moves for the UI.
+
 #include "catan/json_api.hpp"
 
 #include "catan/strategy.hpp"
@@ -46,7 +48,6 @@ const char* phase_name(Phase p) {
   }
 }
 
-// Axial (q,r) = (cube.x, cube.z) → pixel (flat-top, official Catan orientation).
 void hex_pixel(Cube c, double size, double& x, double& y) {
   double q = c.x;
   double r = c.z;
@@ -54,15 +55,12 @@ void hex_pixel(Cube c, double size, double& x, double& y) {
   y = size * (std::sqrt(3.0) * (r + q / 2.0));
 }
 
-// Must match topology.cpp neighbor order (clockwise).
 constexpr Cube kDir[6] = {
     {1, -1, 0}, {1, 0, -1}, {0, 1, -1}, {-1, 1, 0}, {-1, 0, 1}, {0, -1, 1},
 };
 
 Cube cube_add(Cube a, Cube b) { return Cube{a.x + b.x, a.y + b.y, a.z + b.z}; }
 
-// True intersection: centroid of the three hex centers that meet at this corner
-// (sea hexes included as virtual neighbors so coastal corners aren't hex centers).
 void vertex_pixel(const Topology& topo, int v, double size, double& x, double& y) {
   for (int h = 0; h < kNumHexes; ++h) {
     for (int c = 0; c < 6; ++c) {
@@ -82,7 +80,7 @@ void vertex_pixel(const Topology& topo, int v, double size, double& x, double& y
   x = y = 0;
 }
 
-}  // namespace
+}
 
 std::string action_type_name(ActionType t) {
   switch (t) {
@@ -183,7 +181,7 @@ bool road_opens_settle(const RuleCtx& ctx, const GameState& s, int player, int e
   return false;
 }
 
-}  // namespace
+}
 
 std::string explain_why(const RuleCtx& ctx, const GameState& s, const Action& act) {
   const int me = s.current;
@@ -297,7 +295,6 @@ std::string state_to_json(const RuleCtx& ctx, const GameState& s, int you) {
   o << "\"longest_road\":" << int(s.longest_road) << ",";
   o << "\"largest_army\":" << int(s.largest_army) << ",";
 
-  // Hexes
   o << "\"hexes\":[";
   for (int h = 0; h < kNumHexes; ++h) {
     if (h) o << ",";
@@ -315,7 +312,6 @@ std::string state_to_json(const RuleCtx& ctx, const GameState& s, int you) {
   }
   o << "],";
 
-  // Vertices — positions are hex *corners* (intersections), never tile centers.
   o << "\"vertices\":[";
   std::array<double, kNumVertices> vx{}, vy{};
   for (int v = 0; v < kNumVertices; ++v) {
@@ -339,7 +335,6 @@ std::string state_to_json(const RuleCtx& ctx, const GameState& s, int you) {
   }
   o << "],";
 
-  // Edges / roads connect intersection coordinates.
   o << "\"edges\":[";
   for (int e = 0; e < kNumEdges; ++e) {
     if (e) o << ",";
@@ -355,7 +350,6 @@ std::string state_to_json(const RuleCtx& ctx, const GameState& s, int you) {
   }
   o << "],";
 
-  // Players — only "you" sees resource + development cards (hidden info).
   o << "\"players\":[";
   for (int p = 0; p < kNumPlayers; ++p) {
     if (p) o << ",";
@@ -400,4 +394,4 @@ std::string state_to_json(const RuleCtx& ctx, const GameState& s, int you) {
   return o.str();
 }
 
-}  // namespace catan
+}
