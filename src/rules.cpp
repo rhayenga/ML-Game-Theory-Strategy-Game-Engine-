@@ -1,3 +1,5 @@
+// Legal actions and applying moves.
+
 #include "catan/rules.hpp"
 
 #include <algorithm>
@@ -20,8 +22,6 @@ bool connected_to_player_road(const GameState& s, const Topology& topo, int play
   return false;
 }
 
-// Network presence at a vertex for extending roads. Opponent buildings block
-// extending past them (rulebook: cannot build on the other side of an opponent's building).
 bool network_at_vertex(const GameState& s, const Topology& topo, int player, int vertex) {
   uint8_t b = s.building[vertex];
   if (b != 0) {
@@ -73,9 +73,6 @@ void give_resource(GameState& s, int player, int ri, int n) {
   }
 }
 
-// Official shortage rule (rulebook Production): if bank cannot cover everyone's demand
-// for a resource, nobody gets that resource — unless only one player is due, then they
-// take whatever remains.
 void produce(const RuleCtx& ctx, GameState& s, int roll) {
   std::array<int, kNumPlayers> demand{};
   for (int ri = 0; ri < 5; ++ri) {
@@ -109,7 +106,6 @@ void produce(const RuleCtx& ctx, GameState& s, int roll) {
     } else if (claimants == 1) {
       give_resource(s, only, ri, demand[only]);
     }
-    // else: insufficient bank for multiple claimants → nobody receives this resource
   }
 }
 
@@ -129,7 +125,6 @@ void steal_random(GameState& s, int thief, int victim) {
 }
 
 void check_winner(const RuleCtx& ctx, GameState& s) {
-  // Win only checked on the active player's turn (rulebook: 10+ VPs during your turn).
   int p = s.current;
   if (total_vp(s, *ctx.topo, p) >= kWinVp) {
     s.game_over = true;
@@ -176,12 +171,11 @@ void append_dev_plays(const RuleCtx& ctx, const GameState& s, int me, std::vecto
           out.push_back(Action{ActionType::PlayYearOfPlenty, r0, r1, 0, {}});
   }
   if (playable_devs(s.players[me], DevType::RoadBuilding) > 0 && s.players[me].roads_left > 0) {
-    // Card play itself; free road placements follow via free_roads.
     out.push_back(Action{ActionType::PlayRoadBuilding, -1, -1, 0, {}});
   }
 }
 
-}  // namespace
+}
 
 bool can_afford(const PlayerState& p, int brick, int lumber, int ore, int grain, int wool) {
   return p.res[0] >= brick && p.res[1] >= lumber && p.res[2] >= ore && p.res[3] >= grain &&
@@ -203,8 +197,6 @@ void pay(GameState& s, int player, int brick, int lumber, int ore, int grain, in
 }
 
 void recompute_awards(const RuleCtx& ctx, GameState& s) {
-  // Longest road — need a continuous path of 5+ roads (rulebook). Also require
-  // at least 5 road pieces on the board so opening setups can never claim it.
   int best_len = 0, best_p = -1;
   for (int p = 0; p < kNumPlayers; ++p) {
     int pieces = 0;
@@ -222,7 +214,6 @@ void recompute_awards(const RuleCtx& ctx, GameState& s) {
   }
   s.longest_road = static_cast<int8_t>(best_p);
 
-  // Largest army
   best_len = 0;
   best_p = -1;
   for (int p = 0; p < kNumPlayers; ++p) {
@@ -253,7 +244,6 @@ int longest_road_len(const GameState& s, const Topology& topo, int player) {
   bit_of.fill(-1);
   for (int i = 0; i < n; ++i) bit_of[roads[i]] = i;
 
-  // Sparse memo: (vertex, used-road-mask) → best extension length.
   std::unordered_map<uint64_t, int> memo;
   memo.reserve(static_cast<size_t>(n) * 64);
 
@@ -342,12 +332,10 @@ std::vector<Action> legal_actions(const RuleCtx& ctx, const GameState& s) {
   int me = s.current;
 
   if (s.phase == Phase::Discard) {
-    // Only generate discard for players who need it; current sweeps in order.
     for (int p = 0; p < kNumPlayers; ++p) {
       if (!(s.discard_left & (1u << p))) continue;
       int hs = hand_size(s.players[p]);
       int need = hs / 2;
-      // Enumerate is huge — generate one greedy discard action (half highest counts).
       Action act;
       act.type = ActionType::Discard;
       act.a = p;
@@ -362,7 +350,7 @@ std::vector<Action> legal_actions(const RuleCtx& ctx, const GameState& s) {
         --left;
       }
       out.push_back(act);
-      return out;  // one player at a time
+      return out;
     }
     return out;
   }
@@ -389,27 +377,23 @@ std::vector<Action> legal_actions(const RuleCtx& ctx, const GameState& s) {
     return out;
   }
 
-  // Road Building: must place free roads before other actions.
   if (s.free_roads > 0) {
     for (int e = 0; e < kNumEdges; ++e) {
       if (road_placement_legal(s, *ctx.topo, me, e))
         out.push_back(Action{ActionType::BuildRoad, e, 0, 0, {}});
     }
     if (out.empty()) {
-      // No legal placement left (piece limit / blocked) — cancel remaining free roads.
       out.push_back(Action{ActionType::BuildRoad, -1, 0, 0, {}});
     }
     return out;
   }
 
   if (s.phase == Phase::PreRoll) {
-    // Optional: play one development card before rolling (rulebook Production phase).
     append_dev_plays(ctx, s, me, out);
     out.push_back(Action{ActionType::Roll, 0, 0, 0, {}});
     return out;
   }
 
-  // Main / Action phase
   if (s.phase == Phase::Main) {
     append_dev_plays(ctx, s, me, out);
 
@@ -515,7 +499,7 @@ void apply_action(const RuleCtx& ctx, GameState& s, const Action& act) {
     case ActionType::BuildCity: {
       pay(s, me, 0, 0, 3, 2, 0);
       s.building[act.a] = static_cast<uint8_t>(me + 5);
-      s.players[me].settles_left++;  // settlement piece returns
+      s.players[me].settles_left++;
       s.players[me].cities_left--;
       recompute_awards(ctx, s);
       break;
@@ -525,7 +509,6 @@ void apply_action(const RuleCtx& ctx, GameState& s, const Action& act) {
       if (s.dev_next >= GameState::kDevDeckSize) break;
       int chosen = static_cast<int>(s.dev_deck[s.dev_next++]);
       if (s.dev_bank[chosen] > 0) s.dev_bank[chosen]--;
-      // VP cards are hidden until the end; they count toward win checks immediately.
       if (chosen == static_cast<int>(DevType::VictoryPoint)) {
         s.players[me].vp_cards++;
       } else {
@@ -544,7 +527,6 @@ void apply_action(const RuleCtx& ctx, GameState& s, const Action& act) {
       if (act.b >= 0) {
         steal_random(s, me, act.b);
       } else {
-        // Fallback: steal from the strongest (VP) victim on the hex, not a random seat.
         int best = -1;
         int best_vp = -1;
         for (int c = 0; c < 6; ++c) {
@@ -609,4 +591,4 @@ void apply_action(const RuleCtx& ctx, GameState& s, const Action& act) {
   }
 }
 
-}  // namespace catan
+}
