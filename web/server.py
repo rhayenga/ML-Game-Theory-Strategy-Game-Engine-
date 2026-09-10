@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local web UI for the Catan engine — serves map + best-move coach."""
+# Local HTTP server: static UI + JSON bridge to catan_bridge.
 
 from __future__ import annotations
 
@@ -18,9 +18,7 @@ TRAIN = ROOT / "build" / "catan_train"
 WEB = Path(__file__).resolve().parent
 HOST, PORT = "127.0.0.1", 8765
 
-
 class TrainJob:
-    """Background self-play training started from the UI."""
 
     def __init__(self) -> None:
         self.lock = threading.Lock()
@@ -104,10 +102,9 @@ class TrainJob:
                     self.log_tail.append(line)
                     if len(self.log_tail) > 40:
                         self.log_tail = self.log_tail[-40:]
-                    # Parse: "  game 500/1000 finished=..."
                     if "game " in line and "/" in line:
                         try:
-                            part = line.strip().split()[1]  # 500/1000
+                            part = line.strip().split()[1]
                             cur = int(part.split("/")[0])
                             self.done = cur
                         except (IndexError, ValueError):
@@ -133,9 +130,7 @@ class TrainJob:
                 self.running = False
                 self.error = str(e)
 
-
 TRAIN_JOB = TrainJob()
-
 
 class Engine:
     def __init__(self) -> None:
@@ -171,9 +166,7 @@ class Engine:
             pass
         self.proc.terminate()
 
-
 ENGINE = Engine()
-
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args) -> None:
@@ -225,7 +218,6 @@ class Handler(BaseHTTPRequestHandler):
                     "seed": int(body.get("seed", 42)),
                     "weights": body.get("weights", "build/eval_weights.json"),
                 }
-                # Omit opp_subopt so bridge picks a random ~72–88% rate per game.
                 if "opp_subopt" in body:
                     payload["opp_subopt"] = float(body["opp_subopt"])
                 self._json(200, ENGINE.call(payload))
@@ -252,9 +244,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             self._json(500, {"ok": False, "error": str(e)})
 
-
 def main() -> None:
-    # Warm ping
     print(ENGINE.call({"op": "ping"}))
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Catan UI → http://{HOST}:{PORT}")
@@ -266,7 +256,6 @@ def main() -> None:
     finally:
         ENGINE.close()
         httpd.server_close()
-
 
 if __name__ == "__main__":
     main()
