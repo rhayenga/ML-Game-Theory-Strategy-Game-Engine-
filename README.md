@@ -20,14 +20,16 @@ A Settlers of Catan coaching engine: C++20 rules + eval + MCTS, with a local web
 
 ## Quick start
 
-This is a **local** app (not a hosted site). GitHub only stores the code — there is nothing to open in the repo “Website” field.
+**Project page:** [https://rhayenga.github.io/ML-Game-Theory-Strategy-Game-Engine-/](https://rhayenga.github.io/ML-Game-Theory-Strategy-Game-Engine-/)
+
+The playable coach runs on your machine (GitHub Pages is the project site, not the game server):
 
 ```bash
 make -j4
 PYTHONUNBUFFERED=1 python3 web/server.py
 ```
 
-Then in your browser open: `http://127.0.0.1:8765/`
+Then open `http://127.0.0.1:8765/` in your browser.
 
 Optional: `make ui` builds the bridge and starts the server.
 

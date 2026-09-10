@@ -1,0 +1,158 @@
+<!-- Project site for Catan Coach (GitHub Pages). -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Catan Coach</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --pine: #14261c;
+      --parchment: #efe2c5;
+      --ember: #e89b2d;
+      --moss: #6fbf7a;
+      --ink: #efe2c5;
+      --font-display: "Sora", system-ui, sans-serif;
+      --font-body: "IBM Plex Sans", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      color: var(--ink);
+      font-family: var(--font-body);
+      background:
+        radial-gradient(900px 480px at 10% -10%, rgba(106, 168, 90, 0.2), transparent 55%),
+        radial-gradient(700px 420px at 100% 0%, rgba(232, 155, 45, 0.14), transparent 50%),
+        linear-gradient(165deg, #1a3024 0%, var(--pine) 45%, #0f1c15 100%);
+    }
+    .wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 4.5rem 1.4rem 3rem;
+    }
+    .brand {
+      font-family: var(--font-display);
+      font-size: clamp(2.4rem, 7vw, 3.4rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin: 0 0 0.75rem;
+      line-height: 1.05;
+    }
+    .brand span { color: var(--ember); }
+    .lede {
+      margin: 0 0 1.75rem;
+      font-size: 1.1rem;
+      line-height: 1.55;
+      max-width: 36rem;
+      opacity: 0.92;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 2.5rem;
+    }
+    a.btn {
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+      padding: 0.75rem 1.15rem;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      border: 1px solid transparent;
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+    a.btn:hover { transform: translateY(-1px); }
+    a.primary {
+      background: var(--ember);
+      color: #1a1208;
+    }
+    a.ghost {
+      background: rgba(239, 226, 197, 0.06);
+      color: var(--parchment);
+      border-color: rgba(239, 226, 197, 0.2);
+    }
+    section {
+      margin-top: 1.75rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(239, 226, 197, 0.12);
+    }
+    h2 {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      margin: 0 0 0.65rem;
+    }
+    p, li {
+      margin: 0 0 0.65rem;
+      line-height: 1.5;
+      opacity: 0.9;
+    }
+    ol { padding-left: 1.2rem; margin: 0; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.88em;
+      background: rgba(0, 0, 0, 0.28);
+      padding: 0.12rem 0.4rem;
+      border-radius: 5px;
+    }
+    pre {
+      margin: 0.75rem 0 0;
+      padding: 0.9rem 1rem;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(239, 226, 197, 0.1);
+      overflow-x: auto;
+      font-size: 0.86rem;
+      line-height: 1.45;
+    }
+    .note {
+      color: var(--moss);
+      font-size: 0.92rem;
+    }
+    footer {
+      margin-top: 2.5rem;
+      font-size: 0.82rem;
+      opacity: 0.55;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 class="brand">Catan <span>Coach</span></h1>
+    <p class="lede">
+      A C++ coaching engine for Settlers of Catan — MCTS move advice, strategy eval,
+      self-play training, and a local web UI for autoplay.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine-">View on GitHub</a>
+      <a class="btn ghost" href="https://github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine-#quick-start">Quick start</a>
+    </div>
+
+    <section>
+      <h2>Run it on your machine</h2>
+      <p class="note">The playable coach isn’t hosted in the browser — it needs the local engine.</p>
+      <ol>
+        <li>Clone the repo</li>
+        <li>Build and start the UI</li>
+        <li>Open <code>http://127.0.0.1:8765/</code></li>
+      </ol>
+      <pre>git clone https://github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine-.git
+cd ML-Game-Theory-Strategy-Game-Engine-
+make -j4
+PYTHONUNBUFFERED=1 python3 web/server.py</pre>
+    </section>
+
+    <section>
+      <h2>What’s inside</h2>
+      <p>Rules engine, heuristic eval, MCTS coach, soft opponent bots, training memory, and an end-of-game recap.</p>
+    </section>
+
+    <footer>Unofficial fan / research project — not affiliated with Catan Studio or Asmodee.</footer>
+  </div>
+</body>
+</html>
