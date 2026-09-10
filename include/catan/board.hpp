@@ -1,5 +1,7 @@
 #pragma once
 
+// Board setups: beginner map, random boards, and seed helpers.
+
 #include "catan/topology.hpp"
 #include "catan/types.hpp"
 
@@ -14,40 +16,33 @@ enum class PortType : uint8_t { None = 0, Generic3, Brick2, Lumber2, Ore2, Grain
 
 struct HexSpec {
   Terrain terrain = Terrain::Desert;
-  uint8_t number = 0;  // 0 for desert
+  uint8_t number = 0;
 };
 
 struct Placement {
   Player player = Player::Red;
   int settle_hex[3]{};
-  int road_to_hex[3]{};  // second vertex as hex triple (use -1 for coastal pair in [0],[1])
+  int road_to_hex[3]{};
   bool road_coastal = false;
   bool gives_starting_resources = false;
-  // If >= 0, used instead of hex triples (for random setups).
   int vertex = -1;
   int road_edge = -1;
 };
 
 struct BoardSpec {
   std::array<HexSpec, kNumHexes> hexes{};
-  // Per-vertex port (harbors touch 2 vertices; both get the same PortType).
   std::array<PortType, kNumVertices> port_at{};
-  std::array<Placement, 8> placements{};  // 4 players × 2
+  std::array<Placement, 8> placements{};
   int desert_hex = 9;
 };
 
-// Official Starting Map for Beginners (Illustration A) + fixed placements.
 BoardSpec beginner_board(const Topology& topo);
 
-// Variable board: shuffled terrain/numbers/ports + random legal opening placements.
-// Every call with a different rng stream yields a different game.
 BoardSpec random_board(const Topology& topo, uint32_t& rng);
 
-// Seeds used to regenerate trained boards (so UI openings can match train memory).
 void append_board_seed(const std::string& path, uint32_t seed);
 std::vector<uint32_t> load_board_seeds(const std::string& path);
 void write_board_seeds(const std::string& path, const std::vector<uint32_t>& seeds);
-// Pick a board start-seed different from `last`. Prefers trained seeds when available.
 uint32_t pick_play_board_seed(uint32_t prefer, uint32_t& last,
                               const std::string& path = "build/board_seeds.txt");
 
@@ -68,4 +63,4 @@ inline Resource port_resource(PortType p) {
   }
 }
 
-}  // namespace catan
+}
