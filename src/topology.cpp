@@ -1,3 +1,5 @@
+// Build the hex/vertex/edge topology for a standard board.
+
 #include "catan/topology.hpp"
 
 #include <algorithm>
@@ -8,15 +10,12 @@
 namespace catan {
 namespace {
 
-// Neighbor directions (cube), clockwise.
 constexpr Cube kDir[6] = {
     {1, -1, 0}, {1, 0, -1}, {0, 1, -1}, {-1, 1, 0}, {-1, 0, 1}, {0, -1, 1},
 };
 
 Cube add(Cube a, Cube b) { return Cube{a.x + b.x, a.y + b.y, a.z + b.z}; }
 
-// Vertex key = sorted triple of theoretical hex cubes meeting at this corner
-// (sea hexes included as virtual coords so coastal corners stay unique).
 using VKey = std::tuple<int, int, int, int, int, int, int, int, int>;
 
 VKey corner_key(Cube h, int c) {
@@ -29,7 +28,7 @@ VKey corner_key(Cube h, int c) {
               arr[2].x, arr[2].y, arr[2].z};
 }
 
-}  // namespace
+}
 
 Topology build_topology() {
   Topology t{};
@@ -171,4 +170,4 @@ int Topology::find_edge(int v0, int v1) const {
   throw std::runtime_error("edge not found");
 }
 
-}  // namespace catan
+}
