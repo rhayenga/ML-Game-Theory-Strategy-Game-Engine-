@@ -1,3 +1,5 @@
+// Catan Coach front-end: board render, advice UI, autoplay, game recap.
+
 const COLORS = {
   hills: "#c47a4a",
   forest: "#2f7a4b",
@@ -7,10 +9,10 @@ const COLORS = {
   desert: "#c9b896",
 };
 const PLAYER = [
-  { fill: "#ff2d2d", stroke: "#4a0000" }, // Red
-  { fill: "#ffffff", stroke: "#1a1a1a" }, // White
-  { fill: "#ff9500", stroke: "#5a2a00" }, // Orange
-  { fill: "#2f6bff", stroke: "#0a1f66" }, // Blue
+  { fill: "#ff2d2d", stroke: "#4a0000" },
+  { fill: "#ffffff", stroke: "#1a1a1a" },
+  { fill: "#ff9500", stroke: "#5a2a00" },
+  { fill: "#2f6bff", stroke: "#0a1f66" },
 ];
 const RES = ["brick", "lumber", "ore", "grain", "wool"];
 
@@ -44,7 +46,6 @@ function toast(msg) {
 }
 
 function hexPolygon(cx, cy, size) {
-  // Flat-top hexes (official Catan orientation) — must match backend hex_pixel layout.
   const pts = [];
   for (let i = 0; i < 6; i++) {
     const a = (Math.PI / 180) * (60 * i);
@@ -72,7 +73,6 @@ function renderBoard(s) {
   bg.setAttribute("fill", "rgba(45, 95, 88, 0.45)");
   svg.appendChild(bg);
 
-  // Hex tiles first
   for (const h of s.hexes) {
     const g = document.createElementNS(ns, "g");
     const poly = document.createElementNS(ns, "polygon");
@@ -110,7 +110,6 @@ function renderBoard(s) {
     svg.appendChild(g);
   }
 
-  // Roads on edges (between corners) — thick stroke + dark outline for visibility
   for (const e of s.edges) {
     if (e.owner < 0) continue;
     const col = PLAYER[e.owner];
@@ -134,7 +133,6 @@ function renderBoard(s) {
     svg.appendChild(line);
   }
 
-  // Empty intersections (legal build spots are corners only)
   for (const v of s.vertices) {
     if (v.owner >= 0) continue;
     const c = document.createElementNS(ns, "circle");
@@ -147,7 +145,6 @@ function renderBoard(s) {
     svg.appendChild(c);
   }
 
-  // Settlements / cities on corners only
   for (const v of s.vertices) {
     if (v.owner < 0) continue;
     const col = PLAYER[v.owner];
@@ -236,7 +233,6 @@ function renderTopList(data) {
       },
     ];
   }
-  // Highest confidence first, then renumber ranks.
   topMoves.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0) || (b.visits ?? 0) - (a.visits ?? 0));
   topMoves.forEach((m, i) => {
     m.rank = i + 1;
@@ -486,10 +482,9 @@ function setState(s, priorGames) {
   if (priorGames != null) {
     const n = Number(priorGames);
     $("visitTag").textContent = `Prior games with this position: ${n}`;
-    const known = s.positions_known; // may be absent on state blob
+    const known = s.positions_known;
     const mem = $("trainStatus");
     if (mem && !mem.classList.contains("busy")) {
-      // Keep banner + sidebar on the SAME prior number (current position).
       const posKnown = window.__positionsKnown;
       const knownTxt = posKnown != null ? `${posKnown} positions · ` : "";
       mem.textContent = `Memory: ${knownTxt}this position seen in ${n} games (drops as the position gets rarer)`;
@@ -577,7 +572,6 @@ async function autoOpponents(announce) {
   if (announce) showOpponentMoves(data.log || []);
   setState(data.state, data.prior_games);
   if (data.state.game_over) {
-    // renderSide handles winner text
   } else if ((data.log || []).length) {
     $("meta").textContent = "Opponents finished — your turn. Find top 3.";
   } else {
@@ -602,7 +596,6 @@ async function runAutoPlay() {
     while (!autoAbort && state && !state.game_over) {
       await think();
       if (autoAbort || !lastAdvice || state.game_over) break;
-      // Short pause so you can glance at the top 3
       await new Promise((r) => setTimeout(r, 1100));
       if (autoAbort) break;
       await playRecommended();
@@ -650,7 +643,6 @@ async function refreshTrainStatus() {
         clearInterval(trainPoll);
         trainPoll = null;
       }
-      // Pull fresh position memory into the live engine
       api("/api/reload_visits")
         .then((r) => {
           if (r.positions_known != null) {
@@ -663,7 +655,6 @@ async function refreshTrainStatus() {
       if (btn) btn.disabled = false;
     }
   } catch (_) {
-    /* ignore */
   }
 }
 
