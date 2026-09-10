@@ -1,3 +1,5 @@
+// Game state helpers: RNG, VP, initial setup.
+
 #include "catan/state.hpp"
 
 #include <stdexcept>
@@ -6,7 +8,6 @@
 namespace catan {
 
 uint32_t rng_next(GameState& s) {
-  // xorshift32
   uint32_t x = s.rng;
   x ^= x << 13;
   x ^= x >> 17;
@@ -50,9 +51,8 @@ GameState make_initial_state(const Topology& topo, const BoardSpec& board, uint3
   s.rng = seed ? seed : 0xCA7A12u;
   s.robber = static_cast<uint8_t>(board.desert_hex);
   s.phase = Phase::PreRoll;
-  s.current = 0;  // Red starts (first player)
+  s.current = 0;
 
-  // Official shuffled development deck.
   {
     int i = 0;
     for (int k = 0; k < 14; ++k) s.dev_deck[i++] = static_cast<uint8_t>(DevType::Knight);
@@ -92,7 +92,6 @@ GameState make_initial_state(const Topology& topo, const BoardSpec& board, uint3
     s.road[e] = static_cast<uint8_t>(p + 1);
     s.players[p].roads_left--;
 
-    // Rulebook: only the second settlement grants starting resources (1 per adjacent land hex).
     if (pl.gives_starting_resources) {
       for (int i = 0; i < topo.vertex_hex_count[v]; ++i) {
         int h = topo.vertex_hexes[v][i];
@@ -110,4 +109,4 @@ GameState make_initial_state(const Topology& topo, const BoardSpec& board, uint3
   return s;
 }
 
-}  // namespace catan
+}
