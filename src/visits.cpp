@@ -3,10 +3,12 @@
 #include "catan/json_api.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 namespace catan {
 namespace {
@@ -18,6 +20,10 @@ void mix(uint64_t& h, uint64_t v) {
 }  // namespace
 
 uint64_t hash_position(const GameState& s, const BoardSpec& board) {
+  // Structural fingerprint only: board layout + pieces + turn/awards.
+  // Excludes exact hands, bank, and shuffled deck so the same board state keeps
+  // accumulating "prior games" across rolls/trades (otherwise priors die to 0
+  // after the first dice roll).
   uint64_t h = 0xcbf29ce484222325ULL;
   for (int i = 0; i < kNumHexes; ++i) {
     mix(h, static_cast<uint64_t>(board.hexes[i].terrain));
@@ -28,20 +34,18 @@ uint64_t hash_position(const GameState& s, const BoardSpec& board) {
   for (uint8_t b : s.building) mix(h, b);
   for (uint8_t r : s.road) mix(h, r);
   for (const auto& p : s.players) {
-    for (uint8_t x : p.res) mix(h, x);
     mix(h, p.knights_played);
     mix(h, p.vp_cards);
-    for (uint8_t d : p.devs) mix(h, d);
-    mix(h, p.new_dev);
+    mix(h, p.roads_left);
+    mix(h, p.settles_left);
+    mix(h, p.cities_left);
   }
-  for (uint8_t b : s.bank) mix(h, b);
-  for (uint8_t d : s.dev_bank) mix(h, d);
   mix(h, s.robber);
   mix(h, s.current);
   mix(h, static_cast<uint64_t>(s.phase));
   mix(h, static_cast<uint64_t>(s.longest_road + 1));
   mix(h, static_cast<uint64_t>(s.largest_army + 1));
-  mix(h, s.discard_left);
+  mix(h, s.free_roads);
   return h;
 }
 
@@ -168,6 +172,60 @@ const PositionStat* VisitStore::find(uint64_t h) const {
   auto it = by_hash.find(buf);
   if (it == by_hash.end()) return nullptr;
   return &it->second;
+}
+
+void VisitStore::record_move(uint64_t h, const Action& a) {
+  auto& st = touch(h);
+  st.visits += 1;
+  auto& mv = st.moves[action_key(a)];
+  mv.visits += 1;
+  if (st.moves.size() > 48) {
+    std::string worst;
+    int worst_v = 1e9;
+    for (const auto& [k, m] : st.moves) {
+      if (m.visits < worst_v) {
+        worst_v = m.visits;
+        worst = k;
+      }
+    }
+    if (!worst.empty() && worst_v <= 1) st.moves.erase(worst);
+  }
+}
+
+void VisitStore::prune(size_t max_positions) {
+  if (by_hash.size() <= max_positions) return;
+  std::vector<std::pair<uint64_t, std::string>> ranked;
+  ranked.reserve(by_hash.size());
+  for (const auto& [k, st] : by_hash) {
+    uint64_t score = st.game_seen * 10 + st.visits;
+    if (!st.moves.empty()) score += 5;
+    ranked.push_back({score, k});
+  }
+  std::sort(ranked.begin(), ranked.end(),
+            [](const auto& a, const auto& b) { return a.first > b.first; });
+  std::unordered_map<std::string, PositionStat> keep;
+  keep.reserve(max_positions);
+  for (size_t i = 0; i < ranked.size() && keep.size() < max_positions; ++i) {
+    keep.emplace(ranked[i].second, by_hash[ranked[i].second]);
+  }
+  by_hash.swap(keep);
+}
+
+double move_prior(const VisitStore* visits, uint64_t h, const Action& a,
+                  const std::vector<Action>& legal) {
+  const int n = std::max(1, static_cast<int>(legal.size()));
+  if (!visits || legal.empty()) return 1.0 / n;
+  const PositionStat* st = visits->find(h);
+  if (!st || st->moves.empty()) return 1.0 / n;
+  int total = 0;
+  for (const auto& cand : legal) {
+    auto it = st->moves.find(action_key(cand));
+    total += (it != st->moves.end()) ? it->second.visits : 0;
+  }
+  auto it = st->moves.find(action_key(a));
+  int v = (it != st->moves.end()) ? it->second.visits : 0;
+  // Laplace smoothing — AlphaZero-style prior from empirical policy.
+  return (static_cast<double>(v) + 1.0) / (static_cast<double>(total) + n);
 }
 
 uint64_t VisitStore::total_position_hits() const {

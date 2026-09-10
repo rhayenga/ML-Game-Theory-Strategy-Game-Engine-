@@ -6,7 +6,12 @@ const COLORS = {
   pasture: "#7bbf5a",
   desert: "#c9b896",
 };
-const PLAYER = ["#e4572e", "#f4f1ec", "#e89a12", "#3b82f6"];
+const PLAYER = [
+  { fill: "#ff2d2d", stroke: "#4a0000" }, // Red
+  { fill: "#ffffff", stroke: "#1a1a1a" }, // White
+  { fill: "#ff9500", stroke: "#5a2a00" }, // Orange
+  { fill: "#2f6bff", stroke: "#0a1f66" }, // Blue
+];
 const RES = ["brick", "lumber", "ore", "grain", "wool"];
 
 let state = null;
@@ -15,6 +20,7 @@ let topMoves = [];
 let selectedIdx = 0;
 let autoRunning = false;
 let autoAbort = false;
+let lastRecapKey = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -38,9 +44,10 @@ function toast(msg) {
 }
 
 function hexPolygon(cx, cy, size) {
+  // Flat-top hexes (official Catan orientation) — must match backend hex_pixel layout.
   const pts = [];
   for (let i = 0; i < 6; i++) {
-    const a = (Math.PI / 180) * (60 * i - 30);
+    const a = (Math.PI / 180) * (60 * i);
     pts.push(`${cx + size * Math.cos(a)},${cy + size * Math.sin(a)}`);
   }
   return pts.join(" ");
@@ -62,7 +69,7 @@ function renderBoard(s) {
   bg.setAttribute("cx", "0");
   bg.setAttribute("cy", "0");
   bg.setAttribute("r", "250");
-  bg.setAttribute("fill", "rgba(10, 70, 82, 0.35)");
+  bg.setAttribute("fill", "rgba(45, 95, 88, 0.45)");
   svg.appendChild(bg);
 
   // Hex tiles first
@@ -71,8 +78,8 @@ function renderBoard(s) {
     const poly = document.createElementNS(ns, "polygon");
     poly.setAttribute("points", hexPolygon(h.x, h.y, size - 1.5));
     poly.setAttribute("fill", COLORS[h.terrain] || "#888");
-    poly.setAttribute("stroke", "rgba(8,20,24,0.55)");
-    poly.setAttribute("stroke-width", "2");
+    poly.setAttribute("stroke", "rgba(40, 28, 18, 0.75)");
+    poly.setAttribute("stroke-width", "2.25");
     if (h.id === s.robber) poly.setAttribute("filter", "brightness(0.55)");
     g.appendChild(poly);
 
@@ -103,19 +110,27 @@ function renderBoard(s) {
     svg.appendChild(g);
   }
 
-  // Roads on edges (between corners)
+  // Roads on edges (between corners) — thick stroke + dark outline for visibility
   for (const e of s.edges) {
     if (e.owner < 0) continue;
+    const col = PLAYER[e.owner];
+    const outline = document.createElementNS(ns, "line");
+    outline.setAttribute("x1", e.x0);
+    outline.setAttribute("y1", e.y0);
+    outline.setAttribute("x2", e.x1);
+    outline.setAttribute("y2", e.y1);
+    outline.setAttribute("stroke", col.stroke);
+    outline.setAttribute("stroke-width", "8");
+    outline.setAttribute("stroke-linecap", "round");
+    svg.appendChild(outline);
     const line = document.createElementNS(ns, "line");
     line.setAttribute("x1", e.x0);
     line.setAttribute("y1", e.y0);
     line.setAttribute("x2", e.x1);
     line.setAttribute("y2", e.y1);
-    line.setAttribute("stroke", PLAYER[e.owner]);
-    line.setAttribute("stroke-width", "5.5");
+    line.setAttribute("stroke", col.fill);
+    line.setAttribute("stroke-width", "5");
     line.setAttribute("stroke-linecap", "round");
-    line.setAttribute("opacity", e.owner === 1 ? "0.95" : "0.92");
-    if (e.owner === 1) line.setAttribute("stroke", "#e8e4dc");
     svg.appendChild(line);
   }
 
@@ -126,8 +141,8 @@ function renderBoard(s) {
     c.setAttribute("cx", v.x);
     c.setAttribute("cy", v.y);
     c.setAttribute("r", "3.2");
-    c.setAttribute("fill", "rgba(255,255,255,0.22)");
-    c.setAttribute("stroke", "rgba(8,20,24,0.35)");
+    c.setAttribute("fill", "rgba(60,45,30,0.18)");
+    c.setAttribute("stroke", "rgba(40,28,18,0.4)");
     c.setAttribute("stroke-width", "1");
     svg.appendChild(c);
   }
@@ -135,28 +150,25 @@ function renderBoard(s) {
   // Settlements / cities on corners only
   for (const v of s.vertices) {
     if (v.owner < 0) continue;
+    const col = PLAYER[v.owner];
     if (v.city) {
       const rect = document.createElementNS(ns, "rect");
-      rect.setAttribute("x", v.x - 8);
-      rect.setAttribute("y", v.y - 8);
-      rect.setAttribute("width", "16");
-      rect.setAttribute("height", "16");
+      rect.setAttribute("x", v.x - 9);
+      rect.setAttribute("y", v.y - 9);
+      rect.setAttribute("width", "18");
+      rect.setAttribute("height", "18");
       rect.setAttribute("rx", "2");
-      rect.setAttribute("fill", PLAYER[v.owner]);
-      rect.setAttribute("stroke", "#0b1518");
-      rect.setAttribute("stroke-width", "1.5");
+      rect.setAttribute("fill", col.fill);
+      rect.setAttribute("stroke", col.stroke);
+      rect.setAttribute("stroke-width", "2.25");
       svg.appendChild(rect);
     } else {
-      // House-like triangle on the intersection
       const poly = document.createElementNS(ns, "polygon");
       const x = v.x, y = v.y;
-      poly.setAttribute(
-        "points",
-        `${x},${y - 9} ${x + 8},${y + 5} ${x - 8},${y + 5}`
-      );
-      poly.setAttribute("fill", PLAYER[v.owner]);
-      poly.setAttribute("stroke", "#0b1518");
-      poly.setAttribute("stroke-width", "1.5");
+      poly.setAttribute("points", `${x},${y - 10} ${x + 9},${y + 6} ${x - 9},${y + 6}`);
+      poly.setAttribute("fill", col.fill);
+      poly.setAttribute("stroke", col.stroke);
+      poly.setAttribute("stroke-width", "2.25");
       svg.appendChild(poly);
     }
   }
@@ -219,10 +231,16 @@ function renderTopList(data) {
         action: data.action,
         value: data.value ?? 0,
         visits: data.visits ?? 0,
-        label: data.strategy || "",
+        confidence: data.confidence ?? 100,
+        label: "",
       },
     ];
   }
+  // Highest confidence first, then renumber ranks.
+  topMoves.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0) || (b.visits ?? 0) - (a.visits ?? 0));
+  topMoves.forEach((m, i) => {
+    m.rank = i + 1;
+  });
   selectedIdx = 0;
   lastAdvice = topMoves[0]?.action || null;
 
@@ -238,15 +256,15 @@ function renderTopList(data) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "top-item" + (i === selectedIdx ? " selected" : "");
-    const explain = m.action?.explain || m.explain || m.label || "Move";
+    const explain = m.action?.explain || m.explain || "Move";
+    const why = m.why || m.action?.why || "";
     const conf = Math.round(m.confidence ?? 0);
+    const whyBit = why ? ` — ${why}` : "";
     btn.innerHTML = `
       <span class="rank">#${m.rank || i + 1}</span>
       <span class="body">
         <strong>${explain}</strong>
-        <span class="sub"><span class="conf">${conf}% confidence</span> this is best${
-          m.label ? ` · ${m.label}` : ""
-        }</span>
+        <span class="sub"><span class="conf">${conf}% confidence</span> this is best${whyBit}</span>
       </span>`;
     btn.addEventListener("click", () => {
       selectedIdx = i;
@@ -267,7 +285,6 @@ function clearAdvice() {
   topMoves = [];
   selectedIdx = 0;
   $("topList").innerHTML = "";
-  $("strategyTag").textContent = "Strategy: —";
   $("visitTag").textContent = "Same position in prior games: —";
   $("meta").textContent = "";
 }
@@ -277,14 +294,41 @@ function renderSide(s) {
   const me = s.players[you];
   const hand = $("hand");
   hand.innerHTML = "";
-  me.res.forEach((n, i) => {
+
+  const res = me.res || [];
+  let any = false;
+  res.forEach((n, i) => {
     if (!n) return;
+    any = true;
     const pill = document.createElement("span");
     pill.className = "pill";
     pill.textContent = `${RES[i]} × ${n}`;
     hand.appendChild(pill);
   });
-  if (!me.res.some(Boolean)) {
+
+  const DEV_LABELS = {
+    knight: "Knight",
+    vp: "Victory Point",
+    monopoly: "Monopoly",
+    year_of_plenty: "Invention",
+    road_building: "Road Building",
+  };
+  const NEW_DEV = ["", "Knight", "Victory Point", "Monopoly", "Invention", "Road Building"];
+  if (me.devs) {
+    for (const [key, label] of Object.entries(DEV_LABELS)) {
+      const n = me.devs[key] || 0;
+      if (!n) continue;
+      any = true;
+      const pill = document.createElement("span");
+      pill.className = "pill pill-dev";
+      let text = `${label} × ${n}`;
+      if (me.new_dev && NEW_DEV[me.new_dev] === label) text += " (new)";
+      pill.textContent = text;
+      hand.appendChild(pill);
+    }
+  }
+
+  if (!any) {
     hand.innerHTML = `<span class="pill">empty</span>`;
   }
 
@@ -297,7 +341,15 @@ function renderSide(s) {
   for (const p of s.players) {
     const li = document.createElement("li");
     if (p.id === you) li.classList.add("you");
-    li.innerHTML = `<span>${p.name}${p.id === you ? " (you)" : ""}</span><span>${p.vp} VP · hand ${p.hand_size}</span>`;
+    const bits = [];
+    if (p.building_vp) bits.push(`${p.building_vp} build`);
+    if (p.longest_road) bits.push("+2 longest road");
+    if (p.largest_army) bits.push("+2 largest army");
+    if (p.id === you && p.vp_cards_count) bits.push(`+${p.vp_cards_count} VP cards`);
+    else if (p.knights) bits.push(`${p.knights} knights`);
+    li.innerHTML = `<span>${p.name}${p.id === you ? " (you)" : ""}</span>
+      <span style="text-align:right"><strong>${p.vp} VP</strong>
+      <div class="vp-break">${bits.join(" · ") || `${p.hand_size} cards`}</div></span>`;
     scores.appendChild(li);
   }
 
@@ -311,7 +363,115 @@ function renderSide(s) {
   if (s.game_over) {
     $("meta").textContent =
       s.winner === you ? "You won!" : `Game over — ${s.players[s.winner]?.name || "?"} wins`;
+    showRecap(s);
   }
+}
+
+function hideRecap() {
+  $("recapModal")?.classList.add("hidden");
+}
+
+function pieceCounts(s, playerId) {
+  const settles = (s.vertices || []).filter((v) => v.owner === playerId && !v.city).length;
+  const cities = (s.vertices || []).filter((v) => v.owner === playerId && v.city).length;
+  const roads = (s.edges || []).filter((e) => e.owner === playerId).length;
+  return { settles, cities, roads };
+}
+
+function buildRecap(s) {
+  const you = s.you;
+  const winner = s.winner;
+  const rows = (s.players || [])
+    .map((p) => {
+      const pieces = pieceCounts(s, p.id);
+      const awards = [];
+      if (p.longest_road) awards.push("LR");
+      if (p.largest_army) awards.push("LA");
+      return { ...p, ...pieces, awards };
+    })
+    .sort((a, b) => b.vp - a.vp || a.id - b.id);
+
+  const me = rows.find((p) => p.id === you) || rows[0];
+  const win = rows.find((p) => p.id === winner) || rows[0];
+  const why = [];
+  const won = winner === you;
+
+  if (won) {
+    why.push(`You closed it at ${me.vp} VP.`);
+    if (me.award_vp) why.push(`Awards contributed +${me.award_vp} (Longest Road / Largest Army).`);
+    if (me.cities >= 2) why.push(`Cities carried a lot of your score (${me.cities} on the board).`);
+  } else {
+    why.push(`${win.name} finished at ${win.vp} VP; you ended on ${me.vp}.`);
+    if ((win.award_vp || 0) >= 4) {
+      why.push(`${win.name} held both Longest Road and Largest Army (+4).`);
+    } else if (win.longest_road) {
+      why.push(`${win.name} held Longest Road (+2).`);
+    } else if (win.largest_army) {
+      why.push(`${win.name} held Largest Army (+2).`);
+    }
+    if (me.settles + me.cities <= 2) {
+      why.push(
+        `Your board stalled at ${me.settles} settlement(s) and ${me.cities} city(ies) — needed more expansion.`
+      );
+    }
+    if ((me.building_vp || 0) + 1 < (win.building_vp || 0)) {
+      why.push(
+        `${win.name} outbuilt you on structures (${win.building_vp} vs ${me.building_vp} building VP).`
+      );
+    }
+    if ((me.vp_cards_count || 0) >= 2) {
+      why.push(`You were holding ${me.vp_cards_count} hidden VP cards that never caught the awards race.`);
+    }
+    if ((me.knights || 0) >= 2 && !me.largest_army && win.largest_army) {
+      why.push(`Knight race: you had ${me.knights}, ${win.name} had ${win.knights} and kept Largest Army.`);
+    }
+    if ((me.roads || 0) + 2 < (win.roads || 0) && win.longest_road) {
+      why.push(`Road race: you had ${me.roads} roads vs ${win.name}'s ${win.roads}.`);
+    }
+  }
+
+  if (!why.length) why.push("Final standings below.");
+  return {
+    won,
+    headline: won ? "Victory" : `Defeat — ${win.name} wins`,
+    why,
+    rows,
+  };
+}
+
+function showRecap(s) {
+  if (!s?.game_over) return;
+  const key = `${s.winner}-${(s.players || []).map((p) => p.vp).join(",")}`;
+  if (key === lastRecapKey && !$("recapModal").classList.contains("hidden")) return;
+  lastRecapKey = key;
+
+  const recap = buildRecap(s);
+  $("recapHeadline").textContent = recap.headline;
+  $("recapHeadline").style.color = recap.won ? "var(--accent-2)" : "var(--ember)";
+
+  const why = $("recapWhy");
+  why.innerHTML = "";
+  recap.why.forEach((line) => {
+    const li = document.createElement("li");
+    li.textContent = line;
+    why.appendChild(li);
+  });
+
+  const tbody = $("recapTable").querySelector("tbody");
+  tbody.innerHTML = "";
+  recap.rows.forEach((p) => {
+    const tr = document.createElement("tr");
+    if (p.id === s.you) tr.classList.add("you");
+    if (p.id === s.winner) tr.classList.add("winner");
+    const board = `${p.settles}S / ${p.cities}C`;
+    const awards = p.awards.length ? p.awards.join("+") : "—";
+    const name = `${p.name}${p.id === s.you ? " (you)" : ""}`;
+    tr.innerHTML = `<td>${name}</td><td><strong>${p.vp}</strong></td><td>${board}</td>
+      <td>${p.roads}</td><td>${p.knights || 0}</td><td>${awards}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  $("recapModal").classList.remove("hidden");
 }
 
 function pushLog(msg) {
@@ -324,7 +484,16 @@ function pushLog(msg) {
 function setState(s, priorGames) {
   state = s;
   if (priorGames != null) {
-    $("visitTag").textContent = `Same position in prior games: ${priorGames}`;
+    const n = Number(priorGames);
+    $("visitTag").textContent = `Prior games with this position: ${n}`;
+    const known = s.positions_known; // may be absent on state blob
+    const mem = $("trainStatus");
+    if (mem && !mem.classList.contains("busy")) {
+      // Keep banner + sidebar on the SAME prior number (current position).
+      const posKnown = window.__positionsKnown;
+      const knownTxt = posKnown != null ? `${posKnown} positions · ` : "";
+      mem.textContent = `Memory: ${knownTxt}this position seen in ${n} games (drops as the position gets rarer)`;
+    }
   }
   renderBoard(s);
   renderSide(s);
@@ -351,34 +520,32 @@ function showOpponentMoves(log) {
 async function newGame() {
   stopAuto();
   clearAdvice();
+  hideRecap();
+  lastRecapKey = null;
   $("meta").textContent = "Starting…";
   const you = Number($("seat").value);
   const data = await api("/api/new", { you, seed: Date.now() % 100000 });
+  if (data.positions_known != null) window.__positionsKnown = data.positions_known;
   setState(data.state, data.prior_games ?? 0);
-  pushLog(`New game — you are ${data.state.players[you].name} (unique random board)`);
+  pushLog(`New game — you are ${data.state.players[you].name} (board from training pool)`);
   pushLog(
-    `This opening seen in ${data.prior_games ?? 0} prior games · memory ${data.positions_known ?? "?"} positions`
+    `This position: ${data.prior_games ?? 0} prior games · ${
+      data.positions_known ?? "?"
+    } positions stored`
   );
-  if (data.positions_known != null) {
-    $("trainStatus").textContent = `Position memory: ${data.positions_known} unique · ${
-      data.position_hits ?? 0
-    } total hits (grows when you Train)`;
-  }
   await autoOpponents(true);
-  toast("Board ready · opponents ~20–35% imperfect");
+  toast("Board ready · weaker bots (~80% favor for your color)");
 }
 
 async function think() {
   $("think").disabled = true;
   $("meta").textContent = "Searching for the fastest path to 10 VP…";
   try {
-    const data = await api("/api/advise", { sims: 400 });
-    if (data.strategy) $("strategyTag").textContent = `Strategy: ${data.strategy}`;
+    const data = await api("/api/advise", { sims: 160 });
     const prior = data.prior_games ?? data.position_visits ?? 0;
-    $("visitTag").textContent = `Same position in prior games: ${prior}`;
+    if (data.positions_known != null) window.__positionsKnown = data.positions_known;
     renderTopList(data);
     setState(data.state, prior);
-    renderBoard(data.state);
     $("playRec").disabled = false;
     const best = topMoves[0];
     const conf = Math.round(best?.confidence ?? 0);
@@ -406,6 +573,7 @@ async function playRecommended() {
 
 async function autoOpponents(announce) {
   const data = await api("/api/auto");
+  if (data.positions_known != null) window.__positionsKnown = data.positions_known;
   if (announce) showOpponentMoves(data.log || []);
   setState(data.state, data.prior_games);
   if (data.state.game_over) {
@@ -429,17 +597,17 @@ async function runAutoPlay() {
   autoRunning = true;
   autoAbort = false;
   renderSide(state);
-  toast("Slow autoplay on");
+  toast("Autoplay on");
   try {
     while (!autoAbort && state && !state.game_over) {
       await think();
       if (autoAbort || !lastAdvice || state.game_over) break;
-      // Pause so you can read the top 3 + confidence
-      await new Promise((r) => setTimeout(r, 2200));
+      // Short pause so you can glance at the top 3
+      await new Promise((r) => setTimeout(r, 1100));
       if (autoAbort) break;
       await playRecommended();
       if (autoAbort || !state || state.game_over) break;
-      await new Promise((r) => setTimeout(r, 1800));
+      await new Promise((r) => setTimeout(r, 850));
     }
   } catch (e) {
     toast(e.message);
@@ -501,7 +669,7 @@ async function refreshTrainStatus() {
 
 async function startTrain() {
   try {
-    const data = await api("/api/train", { games: 1000 });
+    const data = await api("/api/train", { games: 1200 });
     toast(data.message || "Training started");
     $("trainStatus").classList.add("busy");
     $("trainStatus").textContent = data.message || "Training…";
@@ -526,6 +694,11 @@ $("autoStop").addEventListener("click", () => {
   toast("Stopping…");
 });
 $("trainBtn").addEventListener("click", () => startTrain());
+$("recapClose")?.addEventListener("click", () => hideRecap());
+$("recapNew")?.addEventListener("click", () => newGame().catch((e) => toast(e.message)));
+$("recapModal")?.addEventListener("click", (e) => {
+  if (e.target === $("recapModal")) hideRecap();
+});
 
 $("meta").textContent = "Click “New game” to begin.";
 refreshTrainStatus();

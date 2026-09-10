@@ -27,10 +27,10 @@ enum class DevType : uint8_t {
 };
 
 enum class Phase : uint8_t {
-  PreRoll,       // may play knight
-  Discard,       // after 7, players with >7 cards
+  PreRoll,       // may play one development card, then must roll
+  Discard,       // after 7, players with >7 resource cards
   RobberMove,    // place robber + steal
-  Main,          // trade / build / play dev
+  Main,          // trade / build / play one development card (if not already)
   GameOver
 };
 

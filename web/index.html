@@ -16,7 +16,6 @@
         <span class="mark">⬡</span>
         <div>
           <h1>Catan Coach</h1>
-          <p>Self-play + community strategies · imperfect opponents</p>
         </div>
       </div>
       <div class="controls">
@@ -29,10 +28,10 @@
           </select>
         </label>
         <button id="newGame" class="primary">New game</button>
-        <button id="trainBtn" type="button">Train 1000</button>
+        <button id="trainBtn" type="button">Train 1200</button>
       </div>
     </header>
-    <p id="trainStatus" class="train-status">ML training: idle — click Train 1000 to run unique self-play games.</p>
+    <p id="trainStatus" class="train-status">ML training: idle — Train 1200 replays a small board pool (~100+ games per opening).</p>
 
     <main class="grid">
       <section class="board-panel">
@@ -44,15 +43,14 @@
         <div class="card advice" id="adviceCard">
           <h2>Top 3 moves</h2>
           <p class="hint">Pick one of the top 3. Confidence = how often the engine preferred that move in this search.</p>
-          <p id="strategyTag" class="strategy-tag">Strategy: —</p>
-          <p id="visitTag" class="meta">Same position in prior games: —</p>
+          <p id="visitTag" class="meta">Prior games with this position: —</p>
           <div id="topList" class="top-list"></div>
           <div class="row">
             <button id="think" class="primary" disabled>Find top 3</button>
             <button id="playRec" disabled>Play selected</button>
           </div>
           <div class="row" style="margin-top:0.5rem">
-            <button id="autoFull" disabled>Slow autoplay</button>
+            <button id="autoFull" disabled>Autoplay</button>
             <button id="autoStop" disabled>Stop</button>
           </div>
           <p id="meta" class="meta"></p>
@@ -83,6 +81,31 @@
         </div>
       </aside>
     </main>
+  </div>
+
+  <div id="recapModal" class="recap-modal hidden" role="dialog" aria-labelledby="recapTitle" aria-modal="true">
+    <div class="recap-panel">
+      <h2 id="recapTitle">Game recap</h2>
+      <p id="recapHeadline" class="recap-headline"></p>
+      <ul id="recapWhy" class="recap-why"></ul>
+      <table class="recap-table" id="recapTable">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>VP</th>
+            <th>Board</th>
+            <th>Roads</th>
+            <th>Knights</th>
+            <th>Awards</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="recap-actions">
+        <button id="recapClose" type="button">Close</button>
+        <button id="recapNew" class="primary" type="button">New game</button>
+      </div>
+    </div>
   </div>
   <script src="/app.js"></script>
 </body>

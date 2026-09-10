@@ -5,6 +5,8 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace catan {
 
@@ -40,6 +42,14 @@ BoardSpec beginner_board(const Topology& topo);
 // Variable board: shuffled terrain/numbers/ports + random legal opening placements.
 // Every call with a different rng stream yields a different game.
 BoardSpec random_board(const Topology& topo, uint32_t& rng);
+
+// Seeds used to regenerate trained boards (so UI openings can match train memory).
+void append_board_seed(const std::string& path, uint32_t seed);
+std::vector<uint32_t> load_board_seeds(const std::string& path);
+void write_board_seeds(const std::string& path, const std::vector<uint32_t>& seeds);
+// Pick a board start-seed different from `last`. Prefers trained seeds when available.
+uint32_t pick_play_board_seed(uint32_t prefer, uint32_t& last,
+                              const std::string& path = "build/board_seeds.txt");
 
 inline int port_rate(PortType p) {
   if (p == PortType::None) return 4;

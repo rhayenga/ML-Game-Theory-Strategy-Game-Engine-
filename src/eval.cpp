@@ -36,6 +36,19 @@ EvalWeights& active_weights() { return g_weights; }
 
 void set_active_weights(const EvalWeights& w) { g_weights = w; }
 
+void sanitize_race_weights(EvalWeights& W) {
+  // All eval weights stay non-negative — never learn "roads are bad".
+  for (double& x : W.w) x = std::clamp(x, 0.0, 12.0);
+  W.w[0] = std::clamp(W.w[0], 4.5, 12.0);                 // VP
+  W.w[1] = std::clamp(W.w[1], 1.6, W.w[0] * 0.95);        // income
+  W.w[2] = std::clamp(W.w[2], 0.25, W.w[0] * 0.35);       // diversity
+  W.w[3] = std::clamp(W.w[3], 0.35, W.w[0] * 0.45);        // army
+  W.w[4] = std::clamp(W.w[4], 0.75, W.w[0] * 0.4);         // road
+  W.w[5] = std::clamp(W.w[5], 0.4, 2.5);                   // seven (feature ≤ 0)
+  if (W.scale < 2.0) W.scale = 2.0;
+  if (W.scale > 12.0) W.scale = 12.0;
+}
+
 bool save_weights(const EvalWeights& w, const std::string& path) {
   std::ofstream out(path);
   if (!out) return false;
@@ -81,6 +94,7 @@ bool load_weights(EvalWeights& w, const std::string& path) {
     if (sp != std::string::npos) nw.scale = std::strtod(s.c_str() + sp + 1, nullptr);
   }
   w = nw;
+  sanitize_race_weights(w);
   return true;
 }
 
@@ -103,18 +117,23 @@ double resource_utility(const RuleCtx& ctx, const GameState& s, int player, Reso
   int ri = static_cast<int>(r);
   const auto& p = s.players[player];
   double need = 0;
+  // Road kit (brick + lumber)
   if (p.res[0] < 1 || p.res[1] < 1) {
-    if (ri == 0 || ri == 1) need += 1.5;
+    if (ri == 0 || ri == 1) need += 1.6;
   }
-  if (p.res[3] < 1 || p.res[4] < 1) {
-    if (ri == 3 || ri == 4) need += 1.2;
+  // Settlement kit (brick + lumber + grain + wool) → +1 VP
+  if (p.res[0] < 1 || p.res[1] < 1 || p.res[3] < 1 || p.res[4] < 1) {
+    if (ri == 0 || ri == 1) need += 1.2;
+    if (ri == 3 || ri == 4) need += 1.3;
   }
+  // City kit (3 ore + 2 grain)
   if (p.res[2] < 3 || p.res[3] < 2) {
     if (ri == 2) need += 2.0;
-    if (ri == 3) need += 1.0;
+    if (ri == 3) need += 1.1;
   }
+  // Dev kit (ore + grain + wool)
   if (p.res[2] < 1 || p.res[3] < 1 || p.res[4] < 1) {
-    if (ri >= 2) need += 0.8;
+    if (ri >= 2) need += 0.9;
   }
 
   double scarcity = 1.0 / (1.0 + pip_income(ctx, s, player, ri));
@@ -136,30 +155,84 @@ double evaluate(const RuleCtx& ctx, const GameState& s, int perspective) {
   for (int p = 0; p < kNumPlayers; ++p) {
     auto f = player_features(ctx, s, p);
     vps[p] = static_cast<int>(f[0] + 1e-9);
+    // Soft-cap award padding: once you lead LR/LA by 2+, extra length/knights
+    // barely matter — prefer converting into settlements/cities.
+    if (s.longest_road == p) {
+      int rival = 0;
+      for (int o = 0; o < kNumPlayers; ++o) {
+        if (o == p) continue;
+        rival = std::max(rival, longest_road_len(s, *ctx.topo, o));
+      }
+      if (f[4] - rival >= 2.0) f[4] = rival + 1.0;
+    }
+    if (s.largest_army == p) {
+      int rival = 0;
+      for (int o = 0; o < kNumPlayers; ++o) {
+        if (o == p) continue;
+        rival = std::max(rival, static_cast<int>(s.players[o].knights_played));
+      }
+      if (f[3] - rival >= 2.0) f[3] = rival + 1.0;
+    }
     double acc = 0;
     for (int i = 0; i < kEvalDim; ++i) acc += W.w[i] * f[i];
-    // Win-as-fast-as-possible: quadratic VP race + late-game urgency.
-    acc += 0.35 * f[0] * f[0];
-    if (vps[p] >= 7) acc += 2.0 * (vps[p] - 6);
-    if (vps[p] >= 9) acc += 4.0;
+    // Race pressure: VP squares hard.
+    acc += 0.7 * f[0] * f[0];
+    if (vps[p] >= 7) acc += 2.5 * (vps[p] - 6);
+    if (vps[p] >= 9) acc += 5.0;
+
+    // Awards (+2 VP): hold them, ramp with progress, reclaim when close to the holder.
+    if (s.longest_road == p) {
+      acc += 2.2;
+    } else {
+      double road = f[4];
+      if (road >= 3) acc += 0.2 * (road - 2);
+      if (road >= 5) acc += 0.7;
+      if (s.longest_road >= 0) {
+        double theirs = longest_road_len(s, *ctx.topo, s.longest_road);
+        double deficit = theirs - road;
+        if (road >= 4 && deficit <= 2) acc += 1.0 + 0.35 * (2.0 - std::max(0.0, deficit));
+      }
+    }
+    if (s.largest_army == p) {
+      acc += 2.2;
+    } else {
+      double army = f[3];
+      if (army >= 1) acc += 0.15 * army;
+      if (army >= 3) acc += 0.7;
+      if (s.largest_army >= 0) {
+        double theirs = s.players[s.largest_army].knights_played;
+        double deficit = theirs - army;
+        if (army >= 2 && deficit <= 2) acc += 0.95 + 0.35 * (2.0 - std::max(0.0, deficit));
+      }
+    }
+
     score[p] = acc;
   }
 
   double my = score[perspective];
   double best_other = -1e9;
   int best_other_vp = 0;
+  // Game theory: evaluate pairwise vs each opponent, then take the worst case
+  // (maximin) blended with the soft zero-sum vs the leader.
+  double worst_pair = 1.0;
+  double sc = W.scale > 1e-6 ? W.scale : 5.0;
   for (int p = 0; p < kNumPlayers; ++p) {
     if (p == perspective) continue;
     if (score[p] > best_other) {
       best_other = score[p];
       best_other_vp = vps[p];
     }
+    double pair = std::tanh((score[perspective] - score[p]) / sc);
+    worst_pair = std::min(worst_pair, pair);
+    // Punish letting an opponent sit on a win threat.
+    if (vps[p] >= 8) my -= 0.8 * (vps[p] - 7);
+    if (vps[p] >= 9 && s.current == p) my -= 1.5;  // their turn near 10
   }
-  // Deny leaders: if someone is racing ahead, punish falling behind harder.
   if (best_other_vp >= 7) my -= 1.2 * (best_other_vp - 6);
-  double diff = my - best_other;
-  double sc = W.scale > 1e-6 ? W.scale : 5.0;
-  return std::tanh(diff / sc);
+
+  double vs_leader = std::tanh((my - best_other) / sc);
+  // 60% leader zero-sum + 40% worst-case opponent (exploit-proof vibe).
+  return 0.6 * vs_leader + 0.4 * worst_pair;
 }
 
 }  // namespace catan

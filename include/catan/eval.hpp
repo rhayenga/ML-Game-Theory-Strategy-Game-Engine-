@@ -13,12 +13,15 @@ inline constexpr int kEvalDim = 6;
 
 // Feature layout: vp, income, diversity, army, road, seven_penalty
 struct EvalWeights {
-  // Race-to-10 priors: VP first, then income / army / road.
-  std::array<double, kEvalDim> w{{3.8, 2.2, 0.2, 0.55, 0.35, 1.1}};
+  // Race-to-10 priors: VP first; income/roads/army unlock settle→city→awards.
+  std::array<double, kEvalDim> w{{6.0, 2.8, 0.5, 1.4, 1.5, 1.0}};
   double scale = 5.0;  // tanh(diff / scale)
 
   static EvalWeights defaults() { return {}; }
 };
+
+// Keep learned weights from inverting the race (roads/income must stay helpful).
+void sanitize_race_weights(EvalWeights& w);
 
 // Global active weights used by evaluate() (loaded by advisor/train).
 EvalWeights& active_weights();

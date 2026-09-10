@@ -1,7 +1,11 @@
 #include "catan/board.hpp"
 
 #include <array>
+#include <cmath>
+#include <cstdlib>
+#include <fstream>
 #include <stdexcept>
+#include <unordered_set>
 #include <vector>
 
 namespace catan {
@@ -100,7 +104,7 @@ BoardSpec beginner_board(const Topology& topo) {
       // Orange: {forest9, pasture4, hills10} → road toward forest9/coast
       Placement{Player::Orange, {2, 5, 6}, {1, 2, 5}, false, false},
       Placement{Player::Orange, {13, 14, 17}, {14, 17, 18}, false, true},
-      // Blue star = brick+lumber+ore (rulebook); road along wood8 coast
+      // Blue star settlement (brick+lumber+ore) gets starting resources; road along wood8 coast.
       Placement{Player::Blue, {12, 13, 16}, {12, 16, -1}, true, true},
       Placement{Player::Blue, {14, 15, 18}, {14, 17, 18}, false, false},
   }};
@@ -156,14 +160,36 @@ BoardSpec random_board(const Topology& topo, uint32_t& rng) {
   }
 
   std::vector<uint8_t> nums = {2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12};
-  shuffle(nums, rng);
-  int ni = 0;
-  for (int i = 0; i < kNumHexes; ++i) {
-    if (b.hexes[i].terrain == Terrain::Desert) {
-      b.hexes[i].number = 0;
-    } else {
-      b.hexes[i].number = nums[ni++];
+  auto hex_adjacent = [&](int h0, int h1) {
+    const Cube& a = topo.hex_cube[h0];
+    const Cube& c = topo.hex_cube[h1];
+    return (std::abs(a.x - c.x) + std::abs(a.y - c.y) + std::abs(a.z - c.z)) / 2 == 1;
+  };
+  auto reds_ok = [&]() {
+    std::vector<int> reds;
+    for (int h = 0; h < kNumHexes; ++h) {
+      uint8_t n = b.hexes[h].number;
+      if (n == 6 || n == 8) reds.push_back(h);
     }
+    for (size_t i = 0; i < reds.size(); ++i) {
+      for (size_t j = i + 1; j < reds.size(); ++j) {
+        if (hex_adjacent(reds[i], reds[j])) return false;
+      }
+    }
+    return true;
+  };
+  // Rulebook variable setup: red numbers (6 & 8) cannot be adjacent.
+  for (int attempt = 0; attempt < 400; ++attempt) {
+    shuffle(nums, rng);
+    int ni = 0;
+    for (int i = 0; i < kNumHexes; ++i) {
+      if (b.hexes[i].terrain == Terrain::Desert) {
+        b.hexes[i].number = 0;
+      } else {
+        b.hexes[i].number = nums[ni++];
+      }
+    }
+    if (reds_ok()) break;
   }
 
   // Ports on distinct coastal edges
@@ -190,12 +216,24 @@ BoardSpec random_board(const Topology& topo, uint32_t& rng) {
     ++pi;
   }
 
-  // Random legal placements: order P0..P3 then P3..P0; second settle gets resources.
+  // Snake-draft openings with pip-weighted variety (not uniform random, not always-best).
   std::array<Player, 8> order = {Player::Red,    Player::White,  Player::Orange, Player::Blue,
                                  Player::Blue,   Player::Orange, Player::White,  Player::Red};
   std::array<uint8_t, kNumVertices> building{};
   std::array<uint8_t, kNumEdges> road{};
   std::array<int, 4> settle_count{};
+
+  auto vertex_pips = [&](int v) {
+    double acc = 0;
+    for (int i = 0; i < topo.vertex_hex_count[v]; ++i) {
+      int h = topo.vertex_hexes[v][i];
+      int n = b.hexes[h].number;
+      if (n >= 2 && n <= 12) acc += kPips[n];
+    }
+    if (b.port_at[v] != PortType::None) acc += 1.2;
+    return acc;
+  };
+
   for (int i = 0; i < 8; ++i) {
     Player pl = order[i];
     int p = static_cast<int>(pl);
@@ -204,24 +242,130 @@ BoardSpec random_board(const Topology& topo, uint32_t& rng) {
       if (settle_ok(topo, building, v)) legal.push_back(v);
     }
     if (legal.empty()) throw std::runtime_error("random_board: no legal settlement");
-    int v = legal[rnd(rng) % legal.size()];
+
+    // Temperature varies by seat/round → different opening "personalities".
+    double temp = 1.1 + 0.55 * ((rnd(rng) % 100) / 100.0);  // 1.1..1.65
+    if (settle_count[p] == 1) temp += 0.35;  // second settle more exploratory
+    std::vector<double> w(legal.size());
+    double wsum = 0;
+    for (size_t j = 0; j < legal.size(); ++j) {
+      w[j] = std::exp(vertex_pips(legal[j]) / temp);
+      wsum += w[j];
+    }
+    double pick = (rnd(rng) % 100000) / 100000.0 * wsum;
+    int v = legal.back();
+    for (size_t j = 0; j < legal.size(); ++j) {
+      pick -= w[j];
+      if (pick <= 0) {
+        v = legal[j];
+        break;
+      }
+    }
     building[v] = static_cast<uint8_t>(p + 1);
 
+    // Road: weighted toward the empty neighbor with best pip potential.
     std::vector<int> edges;
     for (int j = 0; j < topo.vertex_edge_count[v]; ++j) {
       int e = topo.vertex_edges[v][j];
       if (road[e] == 0) edges.push_back(e);
     }
     if (edges.empty()) throw std::runtime_error("random_board: no legal road");
-    int e = edges[rnd(rng) % edges.size()];
+    std::vector<double> ew(edges.size());
+    double esum = 0;
+    for (size_t j = 0; j < edges.size(); ++j) {
+      int e = edges[j];
+      int a0 = topo.edge_vertices[e][0], a1 = topo.edge_vertices[e][1];
+      int other = (a0 == v) ? a1 : a0;
+      double score = 0.4;
+      if (building[other] == 0) score += 0.5 * vertex_pips(other);
+      if (b.port_at[other] != PortType::None) score += 0.8;
+      ew[j] = std::exp(score / 1.2);
+      esum += ew[j];
+    }
+    double ep = (rnd(rng) % 100000) / 100000.0 * esum;
+    int e = edges.back();
+    for (size_t j = 0; j < edges.size(); ++j) {
+      ep -= ew[j];
+      if (ep <= 0) {
+        e = edges[j];
+        break;
+      }
+    }
     road[e] = static_cast<uint8_t>(p + 1);
 
     settle_count[p]++;
-    bool star = settle_count[p] == 2;  // second settlement gets resources
+    bool star = settle_count[p] == 2;
     b.placements[i] = Placement{pl, {0, 0, 0}, {0, 0, 0}, false, star, v, e};
   }
 
   return b;
+}
+
+void append_board_seed(const std::string& path, uint32_t seed) {
+  std::ofstream out(path, std::ios::app);
+  if (!out) return;
+  out << seed << "\n";
+}
+
+std::vector<uint32_t> load_board_seeds(const std::string& path) {
+  std::vector<uint32_t> out;
+  std::ifstream in(path);
+  if (!in) return out;
+  uint32_t s = 0;
+  std::unordered_set<uint32_t> seen;
+  while (in >> s) {
+    if (seen.insert(s).second) out.push_back(s);
+  }
+  return out;
+}
+
+void write_board_seeds(const std::string& path, const std::vector<uint32_t>& seeds) {
+  std::ofstream out(path, std::ios::trunc);
+  if (!out) return;
+  for (uint32_t s : seeds) out << s << "\n";
+}
+
+uint32_t pick_play_board_seed(uint32_t prefer, uint32_t& last, const std::string& path) {
+  auto seeds = load_board_seeds(path);
+  if (seeds.empty()) {
+    uint32_t s = prefer ^ 0xC47A11u;
+    if (s == last) s ^= 0xA5A5A5A5u;
+    last = s;
+    append_board_seed(path, s);
+    return s;
+  }
+
+  // ~1/6 of New Games: invent a fresh layout and add it to the trained pool (caps at 48).
+  // Keeps openings feeling different while still growing memory on those boards.
+  if (seeds.size() < 48 && ((prefer ^ last) % 6u) == 0u) {
+    uint32_t fresh = prefer ^ (0x9E3779B9u * static_cast<uint32_t>(seeds.size() + 3));
+    if (fresh == 0) fresh = 0xC47A11u;
+    bool known = false;
+    for (uint32_t s : seeds) {
+      if (s == fresh) {
+        known = true;
+        break;
+      }
+    }
+    if (!known) {
+      append_board_seed(path, fresh);
+      last = fresh;
+      return fresh;
+    }
+  }
+
+  // Strong shuffle index so consecutive New Games don't cycle the same 2–3 maps.
+  uint32_t mix = prefer * 2654435761u ^ (last * 1597334677u) ^ 0xA5A5A5A5u;
+  size_t start = mix % seeds.size();
+  for (size_t k = 0; k < seeds.size(); ++k) {
+    uint32_t s = seeds[(start + k) % seeds.size()];
+    if (s != last) {
+      last = s;
+      return s;
+    }
+  }
+  last = seeds[start];
+  return last;
 }
 
 }  // namespace catan

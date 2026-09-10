@@ -1,5 +1,7 @@
 #include "catan/json_api.hpp"
 
+#include "catan/strategy.hpp"
+
 #include <array>
 #include <cmath>
 #include <sstream>
@@ -44,7 +46,7 @@ const char* phase_name(Phase p) {
   }
 }
 
-// Axial (q,r) = (cube.x, cube.z) → pixel (pointy-top).
+// Axial (q,r) = (cube.x, cube.z) → pixel (flat-top, official Catan orientation).
 void hex_pixel(Cube c, double size, double& x, double& y) {
   double q = c.x;
   double r = c.z;
@@ -129,27 +131,155 @@ std::string explain_action(const Action& act) {
              (act.b >= 0 ? std::string(" and steal from ") + player_name(static_cast<Player>(act.b))
                          : "");
     case ActionType::BuildRoad:
-      return "Build a road (edge " + std::to_string(act.a) + ")";
-    case ActionType::BuildSettlement:
-      return "Build a settlement (intersection " + std::to_string(act.a) + ")";
-    case ActionType::BuildCity:
-      return "Upgrade to a city (intersection " + std::to_string(act.a) + ")";
+      if (act.a < 0) return "Skip remaining free roads (none legal)";
+      return "Build a road";
+    case ActionType::BuildSettlement: return "Build a settlement";
+    case ActionType::BuildCity: return "Upgrade to a city";
     case ActionType::BuyDev: return "Buy a development card";
     case ActionType::PlayKnight:
-      return "Play Knight — robber to hex " + std::to_string(act.a);
+      return "Play Knight — move robber to hex " + std::to_string(act.a);
     case ActionType::PlayMonopoly:
       return std::string("Play Monopoly on ") + resource_name(static_cast<Resource>(act.a));
     case ActionType::PlayYearOfPlenty:
-      return std::string("Year of Plenty: take ") + resource_name(static_cast<Resource>(act.a)) +
+      return std::string("Play Invention: take ") + resource_name(static_cast<Resource>(act.a)) +
              " and " + resource_name(static_cast<Resource>(act.b));
     case ActionType::PlayRoadBuilding:
-      return "Play Road Building";
+      return "Play Road Building (place up to 2 free roads)";
     case ActionType::MaritimeTrade:
       return "Bank trade: give " + std::to_string(act.c) + " " +
              resource_name(static_cast<Resource>(act.a)) + " for 1 " +
              resource_name(static_cast<Resource>(act.b));
   }
   return action_to_string(act);
+}
+
+namespace {
+
+bool afford(const PlayerState& p, int b, int l, int o, int g, int w) {
+  return can_afford(p, b, l, o, g, w);
+}
+
+bool distance_ok(const GameState& s, const Topology& topo, int v) {
+  if (s.building[v] != 0) return false;
+  uint64_t occupied = 0;
+  for (int u = 0; u < kNumVertices; ++u) {
+    if (s.building[u] != 0) occupied |= (1ULL << u);
+  }
+  return (occupied & (topo.dist2_block[v] & ~(1ULL << v))) == 0;
+}
+
+bool road_opens_settle(const RuleCtx& ctx, const GameState& s, int player, int edge) {
+  if (edge < 0) return false;
+  int v0 = ctx.topo->edge_vertices[edge][0];
+  int v1 = ctx.topo->edge_vertices[edge][1];
+  for (int v : {v0, v1}) {
+    if (!distance_ok(s, *ctx.topo, v)) continue;
+    bool already = false;
+    for (int i = 0; i < ctx.topo->vertex_edge_count[v]; ++i) {
+      if (s.road[ctx.topo->vertex_edges[v][i]] == player + 1) already = true;
+    }
+    if (!already) return true;
+  }
+  return false;
+}
+
+}  // namespace
+
+std::string explain_why(const RuleCtx& ctx, const GameState& s, const Action& act) {
+  const int me = s.current;
+  const auto& hand = s.players[me];
+  switch (act.type) {
+    case ActionType::Roll:
+      return "nothing happens until the dice talk";
+    case ActionType::EndTurn:
+      return "hold the line — no clean build this beat";
+    case ActionType::Discard:
+      return "seven hurts; cut the dead weight";
+    case ActionType::PlaceRobber: {
+      if (robber_hits_self(ctx, s, me, act.a))
+        return "blocks your own hex — never do this";
+      int best_owner = -1, best_vp = -1;
+      for (int c = 0; c < 6; ++c) {
+        int v = ctx.topo->hex_vertices[act.a][c];
+        uint8_t b = s.building[v];
+        if (!b) continue;
+        int owner = (b <= 4) ? (b - 1) : (b - 5);
+        if (owner == me) continue;
+        int ovp = total_vp(s, *ctx.topo, owner);
+        if (ovp > best_vp) {
+          best_vp = ovp;
+          best_owner = owner;
+        }
+      }
+      if (best_owner >= 0)
+        return std::string("starves ") + player_name(static_cast<Player>(best_owner)) +
+               " on a hot number";
+      return "weak park — no enemy buildings on that hex";
+    }
+    case ActionType::BuildRoad: {
+      int len = longest_road_len(s, *ctx.topo, me);
+      if (road_opens_settle(ctx, s, me, act.a))
+        return "pushes toward a future settlement spot";
+      if (len >= 4 && (s.longest_road != me))
+        return "sniffs at Longest Road (+2 VP)";
+      if (len >= 2) return "keeps the network growing before it gets boxed in";
+      return "plants a foothold for later expansion";
+    }
+    case ActionType::BuildSettlement:
+      return "locks in a clean +1 victory point";
+    case ActionType::BuildCity:
+      return "city upgrade — +1 VP and double the harvest";
+    case ActionType::BuyDev:
+      return "a dig into the deck (knight, progress, or hidden VP)";
+    case ActionType::PlayKnight: {
+      if (robber_hits_self(ctx, s, me, act.a))
+        return "knight on your own hex — never";
+      int best_owner = -1, best_vp = -1;
+      for (int c = 0; c < 6; ++c) {
+        int v = ctx.topo->hex_vertices[act.a][c];
+        uint8_t b = s.building[v];
+        if (!b) continue;
+        int owner = (b <= 4) ? (b - 1) : (b - 5);
+        if (owner == me) continue;
+        int ovp = total_vp(s, *ctx.topo, owner);
+        if (ovp > best_vp) {
+          best_vp = ovp;
+          best_owner = owner;
+        }
+      }
+      if (s.players[me].knights_played >= 2)
+        return "knight pressure toward Largest Army";
+      if (best_owner >= 0)
+        return std::string("knight onto ") + player_name(static_cast<Player>(best_owner)) +
+               "'s best production";
+      return "shove the robber and swipe a card";
+    }
+    case ActionType::PlayMonopoly:
+      return "yoink every last " + std::string(resource_name(static_cast<Resource>(act.a)));
+    case ActionType::PlayYearOfPlenty:
+      return "pull exactly the missing pieces from the bank";
+    case ActionType::PlayRoadBuilding:
+      return "two free roads — expand without paying brick/wood";
+    case ActionType::MaritimeTrade: {
+      PlayerState nxt = hand;
+      if (nxt.res[act.a] >= act.c) {
+        nxt.res[act.a] = static_cast<uint8_t>(nxt.res[act.a] - act.c);
+        nxt.res[act.b] = static_cast<uint8_t>(nxt.res[act.b] + 1);
+      }
+      const char* give = resource_name(static_cast<Resource>(act.a));
+      const char* recv = resource_name(static_cast<Resource>(act.b));
+      if (!afford(hand, 1, 1, 0, 1, 1) && afford(nxt, 1, 1, 0, 1, 1))
+        return std::string("clear plan: ") + give + " → " + recv + " completes a settlement";
+      if (!afford(hand, 0, 0, 3, 2, 0) && afford(nxt, 0, 0, 3, 2, 0))
+        return std::string("clear plan: ") + give + " → " + recv + " completes a city";
+      if (!afford(hand, 1, 1, 0, 0, 0) && afford(nxt, 1, 1, 0, 0, 0))
+        return std::string("clear plan: ") + give + " → " + recv + " completes a road";
+      if (!afford(hand, 0, 0, 1, 1, 1) && afford(nxt, 0, 0, 1, 1, 1))
+        return std::string("clear plan: ") + give + " → " + recv + " buys a development card";
+      return std::string("no clear build unlocked — better to pass than bank ") + give;
+    }
+  }
+  return "keeps the race to 10 VP moving";
 }
 
 std::string state_to_json(const RuleCtx& ctx, const GameState& s, int you) {
@@ -225,20 +355,44 @@ std::string state_to_json(const RuleCtx& ctx, const GameState& s, int you) {
   }
   o << "],";
 
-  // Players
+  // Players — only "you" sees resource + development cards (hidden info).
   o << "\"players\":[";
   for (int p = 0; p < kNumPlayers; ++p) {
     if (p) o << ",";
+    const auto& pl = s.players[p];
+    int building_vp = 0;
+    for (int v = 0; v < kNumVertices; ++v) {
+      uint8_t b = s.building[v];
+      if (b == p + 1) building_vp += 1;
+      if (b == p + 5) building_vp += 2;
+    }
+    const int award_vp = (s.longest_road == p ? 2 : 0) + (s.largest_army == p ? 2 : 0);
     o << "{"
       << "\"id\":" << p << ","
       << "\"name\":\"" << player_name(static_cast<Player>(p)) << "\","
       << "\"vp\":" << total_vp(s, *ctx.topo, p) << ","
-      << "\"hand_size\":" << hand_size(s.players[p]) << ","
-      << "\"res\":[" << int(s.players[p].res[0]) << "," << int(s.players[p].res[1]) << ","
-      << int(s.players[p].res[2]) << "," << int(s.players[p].res[3]) << ","
-      << int(s.players[p].res[4]) << "],"
-      << "\"knights\":" << int(s.players[p].knights_played)
-      << "}";
+      << "\"building_vp\":" << building_vp << ","
+      << "\"award_vp\":" << award_vp << ","
+      << "\"hand_size\":" << hand_size(pl) << ","
+      << "\"knights\":" << int(pl.knights_played) << ","
+      << "\"vp_cards_count\":" << (p == you ? int(pl.vp_cards) : 0) << ","
+      << "\"longest_road\":" << (s.longest_road == p ? "true" : "false") << ","
+      << "\"largest_army\":" << (s.largest_army == p ? "true" : "false");
+    if (p == you) {
+      o << ",\"res\":[" << int(pl.res[0]) << "," << int(pl.res[1]) << "," << int(pl.res[2])
+        << "," << int(pl.res[3]) << "," << int(pl.res[4]) << "],"
+        << "\"devs\":{"
+        << "\"knight\":" << int(pl.devs[0]) << ","
+        << "\"vp\":" << int(pl.vp_cards) << ","
+        << "\"monopoly\":" << int(pl.devs[2]) << ","
+        << "\"year_of_plenty\":" << int(pl.devs[3]) << ","
+        << "\"road_building\":" << int(pl.devs[4])
+        << "},"
+        << "\"new_dev\":" << int(pl.new_dev);
+    } else {
+      o << ",\"res\":null,\"devs\":null";
+    }
+    o << "}";
   }
   o << "]";
   o << "}";

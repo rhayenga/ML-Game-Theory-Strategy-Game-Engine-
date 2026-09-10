@@ -225,7 +225,7 @@ class Handler(BaseHTTPRequestHandler):
                     "seed": int(body.get("seed", 42)),
                     "weights": body.get("weights", "build/eval_weights.json"),
                 }
-                # Omit opp_subopt so bridge picks a random 20–35% rate per game.
+                # Omit opp_subopt so bridge picks a random ~72–88% rate per game.
                 if "opp_subopt" in body:
                     payload["opp_subopt"] = float(body["opp_subopt"])
                 self._json(200, ENGINE.call(payload))

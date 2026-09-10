@@ -18,6 +18,7 @@ struct PlayerState {
   uint8_t cities_left = 4;
   std::array<uint8_t, 5> devs{};  // by DevType
   uint8_t new_dev = 0;            // bought this turn (type+1), unplayable
+  uint8_t played_dev = 0;         // 1 if a non-VP dev was played this turn
 };
 
 struct GameState {
@@ -28,8 +29,12 @@ struct GameState {
   std::array<PlayerState, kNumPlayers> players{};
   std::array<uint8_t, 5> bank{{19, 19, 19, 19, 19}};
 
-  // Remaining development deck counts by type (shuffled order not needed for expectation;
-  // we sample proportionally).
+  // Official development deck (25): 14 Knight, 5 VP, 2 Monopoly, 2 Invention, 2 Road Building.
+  // Drawn in shuffled order from the top (dev_next).
+  static constexpr int kDevDeckSize = 25;
+  std::array<uint8_t, kDevDeckSize> dev_deck{};
+  uint8_t dev_next = 0;
+  // Remaining counts by type (kept in sync with the deck for hashing / UI).
   std::array<uint8_t, 5> dev_bank{{14, 5, 2, 2, 2}};
 
   uint8_t robber = 9;
@@ -39,6 +44,7 @@ struct GameState {
   int8_t largest_army = -1;
   uint8_t discard_left = 0;   // bitset of players still needing discard
   uint8_t last_roll = 0;
+  uint8_t free_roads = 0;     // Road Building: roads still to place at no cost
   uint32_t rng = 0xCA7A12u;
 
   bool game_over = false;

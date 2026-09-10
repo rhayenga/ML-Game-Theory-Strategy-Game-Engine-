@@ -1,6 +1,7 @@
 #include "catan/state.hpp"
 
 #include <stdexcept>
+#include <utility>
 
 namespace catan {
 
@@ -49,7 +50,23 @@ GameState make_initial_state(const Topology& topo, const BoardSpec& board, uint3
   s.rng = seed ? seed : 0xCA7A12u;
   s.robber = static_cast<uint8_t>(board.desert_hex);
   s.phase = Phase::PreRoll;
-  s.current = 0;  // Red starts on beginner map (oldest player; we fix Red)
+  s.current = 0;  // Red starts (first player)
+
+  // Official shuffled development deck.
+  {
+    int i = 0;
+    for (int k = 0; k < 14; ++k) s.dev_deck[i++] = static_cast<uint8_t>(DevType::Knight);
+    for (int k = 0; k < 5; ++k) s.dev_deck[i++] = static_cast<uint8_t>(DevType::VictoryPoint);
+    for (int k = 0; k < 2; ++k) s.dev_deck[i++] = static_cast<uint8_t>(DevType::Monopoly);
+    for (int k = 0; k < 2; ++k) s.dev_deck[i++] = static_cast<uint8_t>(DevType::YearOfPlenty);
+    for (int k = 0; k < 2; ++k) s.dev_deck[i++] = static_cast<uint8_t>(DevType::RoadBuilding);
+    for (int j = GameState::kDevDeckSize - 1; j > 0; --j) {
+      int k = static_cast<int>(rng_next(s) % static_cast<uint32_t>(j + 1));
+      std::swap(s.dev_deck[j], s.dev_deck[k]);
+    }
+    s.dev_next = 0;
+    s.dev_bank = {14, 5, 2, 2, 2};
+  }
 
   for (const auto& pl : board.placements) {
     int p = static_cast<int>(pl.player);
@@ -75,6 +92,7 @@ GameState make_initial_state(const Topology& topo, const BoardSpec& board, uint3
     s.road[e] = static_cast<uint8_t>(p + 1);
     s.players[p].roads_left--;
 
+    // Rulebook: only the second settlement grants starting resources (1 per adjacent land hex).
     if (pl.gives_starting_resources) {
       for (int i = 0; i < topo.vertex_hex_count[v]; ++i) {
         int h = topo.vertex_hexes[v][i];
@@ -89,7 +107,6 @@ GameState make_initial_state(const Topology& topo, const BoardSpec& board, uint3
     }
   }
 
-  // Initialize longest road (none at start — all length 1).
   return s;
 }
 
