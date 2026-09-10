@@ -1,5 +1,7 @@
 #pragma once
 
+// Position/move visit store for self-play priors.
+
 #include "catan/board.hpp"
 #include "catan/rules.hpp"
 #include "catan/state.hpp"
@@ -34,13 +36,11 @@ struct VisitStore {
   PositionStat& touch(uint64_t h);
   const PositionStat* find(uint64_t h) const;
   void record_move(uint64_t h, const Action& a);
-  // Drop cold singleton positions so the store stays fast to load.
   void prune(size_t max_positions = 250000);
   uint64_t total_position_hits() const;
   size_t unique_positions() const { return by_hash.size(); }
 };
 
-// Laplace-smoothed prior for `a` among `legal` using past self-play move counts.
 double move_prior(const VisitStore* visits, uint64_t h, const Action& a,
                   const std::vector<Action>& legal);
 
