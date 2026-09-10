@@ -1,3 +1,5 @@
+// JSON stdin/stdout bridge between the web UI and the Catan engine.
+
 #include "catan/board.hpp"
 #include "catan/eval.hpp"
 #include "catan/json_api.hpp"
@@ -30,8 +32,6 @@ struct Session {
   bool ready = false;
   VisitStore visits{};
   std::unordered_set<uint64_t> seen_positions{};
-  // Opponents play imperfectly this often (~0.78). Tuned so your seat wins ~80%
-  // of autoplay games when you follow advice.
   double opp_subopt = 0.78;
   uint32_t last_board_seed = 0;
 };
@@ -166,7 +166,6 @@ std::vector<ScoredMove> rank_moves(const RuleCtx& ctx, const GameState& s, int p
     int dvp = total_vp(n, *ctx.topo, perspective) - vp0;
     v += 4.0 * dvp;
     if (n.game_over && n.winner == perspective) v += 10.0;
-    // Award flips — reclaim when close.
     if (n.longest_road == perspective && s.longest_road != perspective) {
       int old_holder = s.longest_road;
       double claim = 1.0;
@@ -207,8 +206,6 @@ std::vector<ScoredMove> rank_moves(const RuleCtx& ctx, const GameState& s, int p
   }
   std::sort(out.begin(), out.end(),
             [](const ScoredMove& a, const ScoredMove& b) { return a.score > b.score; });
-  // Drop EndTurn only when a productive action exists (build / dev / robber).
-  // Never drop it just because a bank trade is legal — that forced ore dumps.
   if (any_productive) {
     out.erase(std::remove_if(out.begin(), out.end(),
                              [](const ScoredMove& m) {
@@ -219,14 +216,12 @@ std::vector<ScoredMove> rank_moves(const RuleCtx& ctx, const GameState& s, int p
   return out;
 }
 
-// Soft opponents: sometimes sit on cards instead of spending immediately.
 Action pick_imperfect(const RuleCtx& ctx, GameState& s, int perspective, double subopt_rate,
                       const VisitStore* visits) {
   auto ranked = rank_moves(ctx, s, perspective, visits);
   if (ranked.empty()) return Action{ActionType::EndTurn, 0, 0, 0, {}};
   if (ranked.size() == 1) return ranked[0].action;
 
-  // Always Roll / forced discards optimally.
   if (ranked[0].action.type == ActionType::Roll) return ranked[0].action;
   if (s.phase == Phase::Discard) return ranked[0].action;
 
@@ -237,7 +232,6 @@ Action pick_imperfect(const RuleCtx& ctx, GameState& s, int perspective, double 
     return nullptr;
   };
 
-  // Skip only truly bad bank dumps; allow 8+ dumps (0) and clear-goal soft (-0.3).
   if (ranked[0].action.type == ActionType::MaritimeTrade) {
     double ms = maritime_trade_score(s, perspective, ranked[0].action.a, ranked[0].action.b,
                                      ranked[0].action.c);
@@ -252,7 +246,6 @@ Action pick_imperfect(const RuleCtx& ctx, GameState& s, int perspective, double 
     }
   }
 
-  // Hold resources a beat: with hand ≤7, sometimes EndTurn instead of spending.
   {
     int hand = hand_size(s.players[perspective]);
     ActionType best = ranked[0].action.type;
@@ -268,7 +261,6 @@ Action pick_imperfect(const RuleCtx& ctx, GameState& s, int perspective, double 
   double u = (r % 10000) / 10000.0;
   if (u >= subopt_rate) return ranked[0].action;
 
-  // Sometimes pass on an affordable settlement/city (stay patient / weaker).
   if (ranked[0].action.type == ActionType::BuildSettlement ||
       ranked[0].action.type == ActionType::BuildCity) {
     if ((rng_next(s) % 100) < 35) {
@@ -276,7 +268,6 @@ Action pick_imperfect(const RuleCtx& ctx, GameState& s, int perspective, double 
     }
   }
 
-  // Soft pick among next several — never improvise into a speculative bank trade.
   int n = std::min(8, static_cast<int>(ranked.size()));
   int weights[8] = {0, 4, 4, 3, 3, 2, 2, 1};
   int total = 0;
@@ -305,8 +296,6 @@ bool your_decision(const GameState& s, int you, const std::vector<Action>& acts)
 void reply_ok_state(Session& ses) {
   uint64_t ph = hash_position(ses.state, *ses.ctx.board);
   const PositionStat* hist = ses.visits.find(ph);
-  // Always report training memory for THIS board structure (same number as sidebar).
-  // Do not subtract in-session advise touches — that made banner vs sidebar diverge.
   uint64_t prior = hist ? hist->game_seen : 0;
   std::cout << "{\"ok\":true,\"prior_games\":" << prior
             << ",\"positions_known\":" << ses.visits.unique_positions()
@@ -314,7 +303,7 @@ void reply_ok_state(Session& ses) {
             << ",\"state\":" << state_to_json(ses.ctx, ses.state, ses.you) << "}" << std::endl;
 }
 
-}  // namespace
+}
 
 int main() {
   std::ios::sync_with_stdio(false);
@@ -344,7 +333,6 @@ int main() {
         if (find_double(line, "opp_subopt", sub) && sub >= 0) {
           ses.opp_subopt = std::clamp(sub, 0.55, 0.92);
         } else {
-          // ~72–88% imperfect — tuned so your color wins ~80% of autoplay games.
           uint32_t r = static_cast<uint32_t>(seed) ^ 0xA11CEu;
           ses.opp_subopt = 0.72 + 0.16 * ((r % 1000) / 1000.0);
         }
@@ -359,14 +347,10 @@ int main() {
         uint32_t brng = board_start;
         ses.board = random_board(ses.topo, brng);
         ses.ctx = RuleCtx{&ses.topo, &ses.board};
-        // Use leftover rng after board gen (same as trainer) so openings match seeds.
         ses.state = make_initial_state(ses.topo, ses.board, brng);
-        // Opening rule: nobody holds Longest Road / Largest Army yet.
         ses.state.longest_road = -1;
         ses.state.largest_army = -1;
         ses.seen_positions.clear();
-        // Do NOT reload the (huge) visit file on every New Game — that froze the UI.
-        // Train / reload_visits refreshes memory when needed.
         ses.ready = true;
         uint64_t ph = hash_position(ses.state, ses.board);
         const PositionStat* hist = ses.visits.find(ph);
@@ -404,7 +388,6 @@ int main() {
           std::cout << "{\"ok\":false,\"error\":\"no moves\"}" << std::endl;
           continue;
         }
-        // Highest confidence first (#1 = most search visits among the shortlist).
         std::sort(top.begin(), top.end(), [](const RankedAction& a, const RankedAction& b) {
           if (a.visits != b.visits) return a.visits > b.visits;
           return a.value > b.value;
@@ -412,10 +395,8 @@ int main() {
         StrategyStyle style = infer_strategy(ses.ctx, ses.state, ses.you);
         uint64_t ph = hash_position(ses.state, *ses.ctx.board);
         const PositionStat* hist = ses.visits.find(ph);
-        // Prior games that reached this exact position (training memory).
         uint64_t prior_games = hist ? hist->game_seen : 0;
 
-        // Confidence from THIS search only (visit share among top moves).
         int search_total = 0;
         for (const auto& t : top) search_total += std::max(0, t.visits);
         if (search_total <= 0) search_total = static_cast<int>(top.size());
@@ -426,7 +407,6 @@ int main() {
           confidence[i] = 100.0 * static_cast<double>(v) / static_cast<double>(search_total);
         }
 
-        // Track which structures this live game visited (UI session only — never write visits file).
         ses.seen_positions.insert(ph);
 
         char hbuf[32];
@@ -475,7 +455,6 @@ int main() {
               acts[0].type == ActionType::Discard) {
             actor = acts[0].a;
           }
-          // Opponents: no visit priors + high subopt so your seat stays favored.
           Action move = pick_imperfect(ses.ctx, ses.state, actor, ses.opp_subopt, nullptr);
           std::string who = player_name(static_cast<Player>(actor));
           apply_action(ses.ctx, ses.state, move);
@@ -494,8 +473,6 @@ int main() {
         std::cout << "],\"state\":" << state_to_json(ses.ctx, ses.state, ses.you) << "}"
                   << std::endl;
       } else if (op == "probe") {
-        // Offline strength check: your seat plays best one-ply (or light MCTS);
-        // opponents use the same imperfect policy as /api/auto.
         int games = 40;
         int you = 0;
         int sims = 0;
