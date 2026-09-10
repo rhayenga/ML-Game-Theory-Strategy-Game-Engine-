@@ -1,3 +1,5 @@
+// Action bonuses: when to expand, chase awards, trade, or park the robber.
+
 #include "catan/strategy.hpp"
 
 #include "catan/eval.hpp"
@@ -28,7 +30,6 @@ double pip_of(const RuleCtx& ctx, const GameState& s, int player, Resource res) 
 bool can_afford_road(const PlayerState& p) { return can_afford(p, 1, 1, 0, 0, 0); }
 bool can_afford_settle(const PlayerState& p) { return can_afford(p, 1, 1, 0, 1, 1); }
 bool can_afford_city(const PlayerState& p) { return can_afford(p, 0, 0, 3, 2, 0); }
-bool can_afford_dev(const PlayerState& p) { return can_afford(p, 0, 0, 1, 1, 1); }
 
 int building_count(const GameState& s, int player) {
   int n = 0;
@@ -48,7 +49,6 @@ bool distance_ok_settle(const GameState& s, const Topology& topo, int v) {
   return (occupied & (topo.dist2_block[v] & ~(1ULL << v))) == 0;
 }
 
-// True if player already has a legal settlement vertex on their road network.
 bool has_open_settle_site(const RuleCtx& ctx, const GameState& s, int player) {
   if (s.players[player].settles_left == 0) return false;
   for (int v = 0; v < kNumVertices; ++v) {
@@ -78,31 +78,7 @@ int best_rival_army(const GameState& s, int player) {
   return best;
 }
 
-// Pip quality of a future settlement intersection (higher = better expand target).
-double settle_site_score(const RuleCtx& ctx, const GameState& s, int v) {
-  double acc = 0;
-  for (int i = 0; i < ctx.topo->vertex_hex_count[v]; ++i) {
-    int h = ctx.topo->vertex_hexes[v][i];
-    if (h == s.robber) continue;
-    int n = ctx.board->hexes[h].number;
-    if (n < 2 || n > 12) continue;
-    acc += kPips[n];
-  }
-  // Ports are nice stretch goals.
-  if (ctx.board->port_at[v] != PortType::None) acc += 1.5;
-  return acc;
-}
-
-PlayerState after_maritime(const PlayerState& p, int give, int recv, int rate) {
-  PlayerState q = p;
-  if (q.res[give] < rate) return q;
-  q.res[give] = static_cast<uint8_t>(q.res[give] - rate);
-  q.res[recv] = static_cast<uint8_t>(q.res[recv] + 1);
-  return q;
-}
-
 }  // namespace
-
 
 double maritime_trade_score(const GameState& s, int player, int give, int recv, int rate) {
   const auto& hand = s.players[player];
@@ -123,7 +99,6 @@ double maritime_trade_score(const GameState& s, int player, int give, int recv, 
   if (!afford_dev(hand) && afford_dev(nxt)) unlock += 0.5;
 
   const int hs = hand_size(hand);
-  // Receiving this resource helps a kit we're short on.
   const bool need_recv =
       (!afford_settle(hand) && hand.res[recv] < nxt.res[recv] &&
        ((recv == 0 && hand.res[0] < 1) || (recv == 1 && hand.res[1] < 1) ||
@@ -134,7 +109,6 @@ double maritime_trade_score(const GameState& s, int player, int give, int recv, 
        ((recv == 2 && hand.res[2] < 1) || (recv == 3 && hand.res[3] < 1) || (recv == 4 && hand.res[4] < 1)));
 
   if (unlock <= 0) {
-    // No kit completed — dump at 8+ is mildly good; otherwise bad.
     if (hs > 7) return 0.1;
     return -1.15;
   }
@@ -150,11 +124,9 @@ double maritime_trade_score(const GameState& s, int player, int give, int recv, 
 
   const bool unlocked_vp =
       (!afford_settle(hand) && afford_settle(nxt)) || (!afford_city(hand) && afford_city(nxt));
-  // Clear goal but bleeding a kit piece — light penalty.
   if (!unlocked_vp && !surplus) return -0.2;
 
   double score = unlock;
-  // Harbor rate: +0.3 if you need the resource or hand < 7, else -0.1.
   if (rate <= 3) {
     if (need_recv || hs < 7) score += 0.3;
     else score -= 0.1;
@@ -162,7 +134,6 @@ double maritime_trade_score(const GameState& s, int player, int give, int recv, 
   return score;
 }
 
-// True if this hex touches one of `me`'s settlements/cities — never park the robber here.
 bool robber_hits_self(const RuleCtx& ctx, const GameState& s, int me, int hex) {
   if (hex < 0 || hex >= kNumHexes) return true;
   for (int c = 0; c < 6; ++c) {
@@ -175,7 +146,6 @@ bool robber_hits_self(const RuleCtx& ctx, const GameState& s, int me, int hex) {
   return false;
 }
 
-// How hard the robber hurts opponents on this hex (prefer advanced foes + hot numbers).
 double robber_hex_score(const RuleCtx& ctx, const GameState& s, int me, int hex) {
   if (hex < 0 || hex >= kNumHexes || hex == s.robber) return -1e9;
   if (robber_hits_self(ctx, s, me, hex)) return -1e9;
@@ -206,7 +176,7 @@ double robber_hex_score(const RuleCtx& ctx, const GameState& s, int me, int hex)
     score += threat * (0.55 + 0.35 * prod);
     if (hand_size(s.players[owner]) > 0) score += 1.2 + 0.35 * ovp;
   }
-  if (!hits_enemy) score -= 25.0;  // empty hex — strongly prefer enemy tiles
+  if (!hits_enemy) score -= 25.0;
   return score;
 }
 
@@ -233,30 +203,29 @@ StrategyStyle infer_strategy(const RuleCtx& ctx, const GameState& s, int player)
 
 double strategy_action_bonus(const RuleCtx& ctx, const GameState& s, const Action& a, int player,
                              StrategyStyle style) {
+  (void)style;
   double b = 0;
   const auto& hand = s.players[player];
   const int builds = building_count(s, player);
-  const bool need_expand = builds < 4;  // still early — need more settlements
+  const bool need_expand = builds < 4;
   const int road_len = longest_road_len(s, *ctx.topo, player);
   const int knights = s.players[player].knights_played;
   const bool hold_lr = s.longest_road == player;
   const bool hold_la = s.largest_army == player;
   const int rival_road = best_rival_road(s, *ctx.topo, player);
   const int rival_army = best_rival_army(s, player);
-  // Comfortably ahead on the award — stop padding it; cash into settlements/cities.
   const bool secure_lr = hold_lr && (road_len - rival_road) >= 2;
   const bool secure_la = hold_la && (knights - rival_army) >= 2;
   const bool out_of_settle_space = !has_open_settle_site(ctx, s, player);
+
   int settles_on_board = 0, cities_on_board = 0;
   for (int v = 0; v < kNumVertices; ++v) {
     uint8_t bb = s.building[v];
     if (bb == player + 1) ++settles_on_board;
     else if (bb == player + 5) ++cities_on_board;
   }
-  // Two cities / few pieces and no 3rd site yet — expand before upgrading forever.
   const bool must_expand = (settles_on_board + cities_on_board) <= 2 || builds < 3;
   const int vp_cards = static_cast<int>(hand.vp_cards);
-  // Opponent sitting on an award you're one knight/road from stealing.
   const bool contest_la =
       !hold_la && knights >= 2 && s.largest_army >= 0 &&
       (s.players[s.largest_army].knights_played - knights) <= 1;
@@ -265,22 +234,22 @@ double strategy_action_bonus(const RuleCtx& ctx, const GameState& s, const Actio
       (longest_road_len(s, *ctx.topo, s.longest_road) - road_len) <= 2;
 
   auto lr_chase = [&](int my_len) {
-    if (secure_lr) return 0.0;  // already safe — no more road race
+    if (secure_lr) return 0.0;
     double u = 0;
     if (need_expand) u = 0.85 + 0.1 * my_len;
     else if (my_len >= 3) u = 0.1 * my_len;
-    if (hold_lr) return u + 0.35;  // thin lead — slight defense, not a race
+    if (hold_lr) return u + 0.35;
     if (s.longest_road >= 0) {
       int theirs = longest_road_len(s, *ctx.topo, s.longest_road);
       int deficit = theirs - my_len;
-      if (my_len >= 4 && deficit <= 2) u += 1.75;  // reclaim when close
+      if (my_len >= 4 && deficit <= 2) u += 1.75;
     } else if (my_len >= 5) {
       u += 1.0;
     }
     return u;
   };
   auto la_chase = [&](int my_k) {
-    if (secure_la) return 0.0;  // already safe — no more knight farming
+    if (secure_la) return 0.0;
     double u = 0;
     if (my_k >= 1) u += 0.2;
     if (my_k >= 2) u += 0.4;
@@ -290,35 +259,32 @@ double strategy_action_bonus(const RuleCtx& ctx, const GameState& s, const Actio
       int theirs = s.players[s.largest_army].knights_played;
       int deficit = theirs - my_k;
       if (my_k >= 2 && deficit <= 2) u += 1.75;
-      if (my_k >= 2 && deficit <= 1) u += 0.85;  // one knight from stealing LA
+      if (my_k >= 2 && deficit <= 1) u += 0.85;
     } else if (my_k >= 3) {
       u += 1.0;
     }
     return u;
   };
 
-  // End turn: 0 unless you leave a settle/city (or a useful road) on the table.
   if (a.type == ActionType::EndTurn) {
     if (can_afford_settle(hand) || can_afford_city(hand)) b -= 0.25;
     else if (can_afford_road(hand) && !(secure_lr && !out_of_settle_space)) b -= 0.25;
   }
 
-  // Settlements / cities: expand first if still on 2 pieces; cities lead once sprawled.
   if (a.type == ActionType::BuildSettlement) {
     b += 1.15;
-    if (must_expand) b += 0.85;  // 3rd+ settlement beats another city upgrade
+    if (must_expand) b += 0.85;
     if (secure_lr || secure_la) b += 0.25;
   }
   if (a.type == ActionType::BuildCity) {
     b += 1.55;
-    if (must_expand) b -= 0.95;  // don't double-city before a 3rd settlement
+    if (must_expand) b -= 0.95;
     if (secure_lr || secure_la) b += 0.35;
   }
 
   if (a.type == ActionType::BuildRoad && a.a >= 0) {
     int v0 = ctx.topo->edge_vertices[a.a][0];
     int v1 = ctx.topo->edge_vertices[a.a][1];
-    double best_site = 0;
     bool opens_site = false;
     for (int v : {v0, v1}) {
       if (!distance_ok_settle(s, *ctx.topo, v)) continue;
@@ -328,14 +294,10 @@ double strategy_action_bonus(const RuleCtx& ctx, const GameState& s, const Actio
       }
       if (already) continue;
       opens_site = true;
-      best_site = std::max(best_site, settle_site_score(ctx, s, v));
     }
-    (void)best_site;
     if (secure_lr && !out_of_settle_space) {
-      // Leading LR by 2+ and already have settle spots — stop padding roads.
       b -= 1.25;
     } else if (secure_lr && out_of_settle_space) {
-      // Only extend if it opens a new settle site.
       b += opens_site ? 0.5 : -0.6;
     } else {
       b += 0.5;
@@ -346,25 +308,17 @@ double strategy_action_bonus(const RuleCtx& ctx, const GameState& s, const Actio
   }
 
   if (a.type == ActionType::BuyDev) {
-    if (secure_la) {
-      b -= 0.85;  // don't dig the deck just to farm more knights
-    } else if (contest_la) {
-      b += 0.95;  // one knight from LA — dig / play for it
-    } else if (must_expand || can_afford_settle(hand)) {
-      b -= 0.35;  // expand before stacking secret VP cards
-    } else if (vp_cards >= 2 && !hold_la) {
-      b -= 0.45;  // already fat on hidden VP — stop digging, build board
-    } else if (can_afford_city(hand)) {
-      b += 0.05;
-    } else {
-      b += 0.4;
-    }
+    if (secure_la) b -= 0.85;
+    else if (contest_la) b += 0.95;
+    else if (must_expand || can_afford_settle(hand)) b -= 0.35;
+    else if (vp_cards >= 2 && !hold_la) b -= 0.45;
+    else if (can_afford_city(hand)) b += 0.05;
+    else b += 0.4;
   }
-  // Progress cards (one-shot powers from the deck).
+
   if (a.type == ActionType::PlayRoadBuilding) {
-    if (secure_lr && !out_of_settle_space) {
-      b -= 0.8;
-    } else {
+    if (secure_lr && !out_of_settle_space) b -= 0.8;
+    else {
       b += 0.5;
       b += 0.65 * lr_chase(road_len);
     }
@@ -380,7 +334,6 @@ double strategy_action_bonus(const RuleCtx& ctx, const GameState& s, const Actio
       b += 0.2 + 0.5 * rs;
       if (a.b >= 0 && a.b < kNumPlayers) b += 0.4 * total_vp(s, *ctx.topo, a.b);
       if (a.type == ActionType::PlayKnight) {
-        // Knight still OK to move robber; no army-chase when already secure.
         if (!secure_la) b += 0.25 + la_chase(knights);
         else b += 0.05;
       }
@@ -389,13 +342,11 @@ double strategy_action_bonus(const RuleCtx& ctx, const GameState& s, const Actio
 
   if (a.type == ActionType::MaritimeTrade) {
     b += maritime_trade_score(s, player, a.a, a.b, a.c);
-    // Don't bank when a settle/city is already affordable (build instead).
     if (can_afford_settle(hand) || can_afford_city(hand)) b -= 0.5;
   }
 
-  (void)style;
   if (a.type == ActionType::Roll) b += 0.05;
   return b;
 }
 
-}  // namespace catan
+}
