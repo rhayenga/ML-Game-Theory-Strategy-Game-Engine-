@@ -125,8 +125,8 @@
   <div class="wrap">
     <h1 class="brand">Catan <span>Coach</span></h1>
     <p class="lede">
-      A C++ coaching engine for Settlers of Catan — MCTS move advice, strategy eval,
-      self-play training, and a local web UI for autoplay.
+      Local Settlers of Catan coach: C++20 rules and MCTS advice, PyTorch value-net
+      training from self-play, and a browser UI you run on your machine.
     </p>
     <div class="actions">
       <a class="btn primary" href="https://github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine-">View on GitHub</a>
@@ -135,21 +135,24 @@
 
     <section>
       <h2>Run it on your machine</h2>
-      <p class="note">The playable coach isn’t hosted in the browser — it needs the local engine.</p>
+      <p class="note">The playable coach isn’t hosted in the browser — it needs the local engine and PyTorch for Train.</p>
       <ol>
         <li>Clone the repo</li>
-        <li>Build and start the UI</li>
+        <li>Build and start with <code>make ui</code></li>
         <li>Open <code>http://127.0.0.1:8765/</code></li>
       </ol>
       <pre>git clone https://github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine-.git
 cd ML-Game-Theory-Strategy-Game-Engine-
 make -j4
-PYTHONUNBUFFERED=1 python3 web/server.py</pre>
+make ui</pre>
     </section>
 
     <section>
       <h2>What’s inside</h2>
-      <p>Rules engine, heuristic eval, MCTS coach, soft opponent bots, training memory, and an end-of-game recap.</p>
+      <p>
+        Legal-move engine, strategy eval, MCTS coach, harbor-aware play, softer opponent bots,
+        PyTorch self-play training, opening visit memory, and an end-of-game recap.
+      </p>
     </section>
 
     <footer>Unofficial fan / research project — not affiliated with Catan Studio or Asmodee.</footer>

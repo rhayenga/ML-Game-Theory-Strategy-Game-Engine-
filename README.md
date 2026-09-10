@@ -1,44 +1,46 @@
 # Catan Coach
 
-A Settlers of Catan coaching engine: C++20 rules + eval + MCTS, with a local web UI that recommends top moves and can autoplay against opponent bots.
+Local coaching engine for **Settlers of Catan**: a C++20 rules + strategy engine, MCTS move advice, PyTorch value-net training from self-play, and a browser UI to play and train on your machine.
 
 > Unofficial fan / research project — not affiliated with Catan Studio or Asmodee.
 
-## Features
+**Project page:** [rhayenga.github.io/ML-Game-Theory-Strategy-Game-Engine-](https://rhayenga.github.io/ML-Game-Theory-Strategy-Game-Engine-/)  
+**Repo:** [github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine-](https://github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine-)
 
-- Legal-move engine with settlements, cities, roads, robber, maritime trade, and development cards
-- Heuristic evaluation + strategy bonuses (expand, awards, trades)
-- MCTS advice for your seat; imperfect one-ply opponents
-- Self-play training via PyTorch value-net (C++ generates games; PyTorch updates weights)
-- **Game recap** on finish — VP breakdown, board pieces, and why the game swung
+## What it does
+
+- Full legal-move engine (settlements, cities, roads, robber, harbors / maritime trade, development cards)
+- Heuristic evaluation plus strategy scoring (expansion, awards, trades, harbors)
+- **Find top 3** — MCTS search for your seat; softer one-ply bots for opponents
+- **Train** — C++ self-play dumps position features; PyTorch fits a value net and writes `build/eval_weights.json` (plus visit memory for openings)
+- End-of-game **recap** (VP, board pieces, narrative of what swung the match)
+
+Playing and advising use the C++ bridge. Training **requires** PyTorch.
 
 ## Requirements
 
 - macOS or Linux
-- `clang++` (C++20) or compatible compiler
-- Python 3 with PyTorch (`make ui` installs it into `.venv`)
+- C++20 compiler (`clang++` / compatible)
+- Python 3
+- PyTorch (installed automatically by `make ui` into `.venv`)
 
 ## Quick start
 
-**Project page:** [https://rhayenga.github.io/ML-Game-Theory-Strategy-Game-Engine-/](https://rhayenga.github.io/ML-Game-Theory-Strategy-Game-Engine-/)
-
-Use this folder on your Desktop (`Desktop/Catan`), not an older clone under your home directory.
-
 ```bash
-cd ~/Desktop/Catan
+git clone https://github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine-.git
+cd ML-Game-Theory-Strategy-Game-Engine-
 make -j4
 make ui
 ```
 
-That creates `.venv`, installs PyTorch, frees port 8765 if needed, and starts the UI. Open `http://127.0.0.1:8765/`.
+`make ui` builds the bridge if needed, creates `.venv`, installs `ml/requirements.txt`, frees port **8765** if something else is bound, and starts the server.
 
-**Train** runs C++ self-play to collect features, then **always** fits the PyTorch value net and writes `build/eval_weights.json`.
+Open **http://127.0.0.1:8765/** in your browser.
+
+Manual start (after `make -j4` and a venv with PyTorch):
 
 ```bash
-cd ~/Desktop/Catan
-python3 -m venv .venv
 source .venv/bin/activate
-pip install -r ml/requirements.txt
 PYTHONUNBUFFERED=1 python3 web/server.py
 ```
 
@@ -46,25 +48,43 @@ PYTHONUNBUFFERED=1 python3 web/server.py
 
 | Action | What it does |
 |--------|----------------|
-| **New game** | Random board from the training pool; pick your color |
-| **Find top 3** | MCTS search for your seat |
+| **New game** | Board from the training pool; pick your color |
+| **Find top 3** | MCTS recommendations for your seat |
 | **Play selected** | Apply a recommended move, then opponents act |
-| **Autoplay** | Follow #1 advice until the game ends |
-| **Train 1200** | Self-play + PyTorch value-net update |
+| **Autoplay** | Follow the top advice until the game ends |
+| **Train 1200** | Self-play → PyTorch value-net update |
+
+After Train finishes, start a **New game** (or reload) so the bridge loads the new weights and visit memory.
 
 ## Layout
 
 ```
-apps/          CLI bridge, train, advise, bench
+apps/          CLI: bridge, train, advise, bench
 include/catan/ Public headers
-src/           Engine, eval, MCTS, strategy, visits
-ml/            Optional PyTorch value-net trainer
-web/           UI (server.py, app.js, index.html)
-build/         Objects, binaries, optional weights JSON
+src/           Rules, eval, MCTS, strategy, visits, self-play
+ml/            PyTorch value-net trainer (required for Train)
+web/           Local UI (server.py, app.js, index.html, style.css)
+docs/          GitHub Pages project site
+build/         Binaries, eval_weights.json, samples, checkpoints
+```
+
+## Training pipeline
+
+1. `catan_train` plays games (samples + visit priors; does not own weight updates when `--lr 0`)
+2. `ml/train_value.py` trains a small MLP, exports sanitized linear weights to `build/eval_weights.json`, saves `build/value_net.pt`
+3. The UI / bridge loads those weights for eval and MCTS
+
+CLI equivalent:
+
+```bash
+./build/catan_train 200 --lr 0 --samples build/train_samples.jsonl
+python3 ml/train_value.py
 ```
 
 ## Notes
-- `build/eval_weights.json` can be committed as a starting point; large `position_visits.json` / sample dumps are gitignored — regenerate via Train if you want memory.
+
+- Large `build/position_visits.json`, `train_samples.jsonl`, and `value_net.pt` are gitignored — regenerate locally with Train
+- `build/eval_weights.json` may be kept as a starting point for eval
 
 ## License
 
