@@ -1,6 +1,6 @@
 # Catan Coach
 
-A Settlers of Catan coaching engine: C++20 rules + eval + MCTS, with a local web UI that recommends top moves and can autoplay against soft opponent bots.
+A Settlers of Catan coaching engine: C++20 rules + eval + MCTS, with a local web UI that recommends top moves and can autoplay against opponent bots.
 
 > Unofficial fan / research project — not affiliated with Catan Studio or Asmodee.
 
