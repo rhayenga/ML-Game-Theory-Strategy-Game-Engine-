@@ -33,6 +33,7 @@ struct TrainConfig {
   std::string weights_path = "build/eval_weights.json";
   std::string stats_path = "build/train_stats.json";
   std::string visits_path = "build/position_visits.json";
+  std::string samples_path = "build/train_samples.jsonl";
 };
 
 int play_one_game(const RuleCtx& ctx, GameState state, const TrainConfig& cfg, TrainStats& stats,

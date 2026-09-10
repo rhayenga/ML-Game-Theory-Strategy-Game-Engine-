@@ -25,11 +25,15 @@ static void print_help(const char* argv0) {
       << "  --lr X             Weight learn rate (default 0.05)\n"
       << "  --mcts N           MCTS sims per decision (0=fast one-ply, default 0)\n"
       << "  --weights PATH     Weights JSON in/out (default build/eval_weights.json)\n"
-      << "  --stats PATH       Stats JSON out (default build/train_stats.json)\n\n"
+      << "  --stats PATH       Stats JSON out (default build/train_stats.json)\n"
+      << "  --samples PATH     Feature dump for PyTorch (default build/train_samples.jsonl)\n\n"
       << "Examples:\n"
       << "  " << argv0 << " 1000\n"
       << "  " << argv0 << " 100 --epsilon 0.2 --lr 0.08\n"
       << "  " << argv0 << " 50 --mcts 40\n\n"
+      << "Optional PyTorch fit (same weights file the engine loads):\n"
+      << "  pip install -r ml/requirements.txt\n"
+      << "  python3 ml/train_value.py\n\n"
       << "After training, run: ./build/catan_advise  [sims] [player]\n"
       << "The advisor auto-loads build/eval_weights.json when present.\n";
 }
@@ -54,6 +58,8 @@ int main(int argc, char** argv) {
       cfg.weights_path = argv[++i];
     } else if (a == "--stats" && i + 1 < argc) {
       cfg.stats_path = argv[++i];
+    } else if (a == "--samples" && i + 1 < argc) {
+      cfg.samples_path = argv[++i];
     } else if (a[0] != '-') {
       cfg.games = std::stoi(a);
     } else {

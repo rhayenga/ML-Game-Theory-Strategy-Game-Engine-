@@ -15,8 +15,19 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parents[1]
 BRIDGE = ROOT / "build" / "catan_bridge"
 TRAIN = ROOT / "build" / "catan_train"
+TORCH_TRAIN = ROOT / "ml" / "train_value.py"
 WEB = Path(__file__).resolve().parent
 HOST, PORT = "127.0.0.1", 8765
+
+
+def _torch_available() -> bool:
+    try:
+        import torch  # noqa: F401
+
+        return True
+    except Exception:
+        return False
+
 
 class TrainJob:
 
@@ -41,6 +52,11 @@ class TrainJob:
                 "log_tail": list(self.log_tail[-12:]),
                 "last_result": self.last_result,
             }
+
+    def _append_log(self, line: str) -> None:
+        self.log_tail.append(line)
+        if len(self.log_tail) > 40:
+            self.log_tail = self.log_tail[-40:]
 
     def start(self, games: int = 1000) -> dict:
         with self.lock:
@@ -74,6 +90,8 @@ class TrainJob:
                 "build/eval_weights.json",
                 "--stats",
                 "build/train_stats.json",
+                "--samples",
+                "build/train_samples.jsonl",
             ]
             self.proc = subprocess.Popen(
                 cmd,
@@ -93,15 +111,62 @@ class TrainJob:
                 "message": f"Started {self.games} unique self-play games (seed {seed})",
             }
 
+    def _run_pytorch(self) -> bool:
+        if not TORCH_TRAIN.exists():
+            with self.lock:
+                self._append_log("PyTorch trainer missing — keeping C++ weights.")
+            return False
+        if not _torch_available():
+            with self.lock:
+                self._append_log(
+                    "PyTorch not installed — keeping C++ weights. Optional: pip install -r ml/requirements.txt"
+                )
+            return False
+        samples = ROOT / "build" / "train_samples.jsonl"
+        if not samples.exists() or samples.stat().st_size == 0:
+            with self.lock:
+                self._append_log("No feature samples — keeping C++ weights.")
+            return False
+        with self.lock:
+            self._append_log("Running PyTorch value-net fit…")
+        cmd = [
+            sys.executable,
+            str(TORCH_TRAIN),
+            "--samples",
+            "build/train_samples.jsonl",
+            "--weights",
+            "build/eval_weights.json",
+            "--checkpoint",
+            "build/value_net.pt",
+        ]
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        assert proc.stdout
+        for line in proc.stdout:
+            line = line.rstrip()
+            with self.lock:
+                self._append_log(line)
+        code = proc.wait()
+        with self.lock:
+            if code == 0:
+                self._append_log("PyTorch export done — eval_weights.json updated.")
+                return True
+            self._append_log(f"PyTorch step failed (exit {code}) — keeping C++ weights.")
+            return False
+
     def _watch(self, proc: subprocess.Popen, games: int) -> None:
         assert proc.stdout
         try:
             for line in proc.stdout:
                 line = line.rstrip()
                 with self.lock:
-                    self.log_tail.append(line)
-                    if len(self.log_tail) > 40:
-                        self.log_tail = self.log_tail[-40:]
+                    self._append_log(line)
                     if "game " in line and "/" in line:
                         try:
                             part = line.strip().split()[1]
@@ -110,6 +175,9 @@ class TrainJob:
                         except (IndexError, ValueError):
                             pass
             code = proc.wait()
+            pytorch_ok = False
+            if code == 0:
+                pytorch_ok = self._run_pytorch()
             with self.lock:
                 self.running = False
                 self.done = games if code == 0 else self.done
@@ -121,8 +189,10 @@ class TrainJob:
                         "weights": "build/eval_weights.json",
                         "stats": "build/train_stats.json",
                         "visits": "build/position_visits.json",
+                        "samples": "build/train_samples.jsonl",
+                        "pytorch": pytorch_ok,
                     }
-                    self.log_tail.append(
+                    self._append_log(
                         "Training finished — positions saved. Click New game (or reload) to use them."
                     )
         except Exception as e:

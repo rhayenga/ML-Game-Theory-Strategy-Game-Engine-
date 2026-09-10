@@ -10,8 +10,8 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
-#include <random>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace catan {
@@ -212,6 +212,20 @@ int play_one_game(const RuleCtx& ctx, GameState state, const TrainConfig& cfg, T
     }
     update_weights_from_trajectory(traj, state.winner, cfg.learn_rate);
     update_weights_from_game(ctx, state, state.winner, cfg.learn_rate);
+
+    if (!cfg.samples_path.empty()) {
+      std::ofstream samples_out(cfg.samples_path, std::ios::app);
+      if (samples_out) {
+        for (const auto& step : traj) {
+          samples_out << "{\"feat\":[";
+          for (int i = 0; i < kEvalDim; ++i) {
+            if (i) samples_out << ",";
+            samples_out << step.second[i];
+          }
+          samples_out << "],\"y\":" << (step.first == state.winner ? 1 : 0) << "}\n";
+        }
+      }
+    }
     return state.winner;
   }
   for (int p = 0; p < kNumPlayers; ++p) {
@@ -269,6 +283,11 @@ TrainStats run_training(const RuleCtx& ctx, const BoardSpec& board, const Topolo
   write_board_seeds(seed_path, pool);
   std::cout << "Board pool: " << pool.size() << " layouts (~" << (cfg.games / pool.size())
             << " games each → opening prior should land near that)\n";
+
+  if (!cfg.samples_path.empty()) {
+    std::ofstream wipe(cfg.samples_path, std::ios::trunc);
+    std::cout << "Dumping feature samples -> " << cfg.samples_path << "\n";
+  }
 
   for (int g = 0; g < cfg.games; ++g) {
     stats.games++;

@@ -12,6 +12,8 @@ build/board_seeds.txt
 
 # Large / regenerated training memory (retrain locally)
 build/position_visits.json
+build/train_samples.jsonl
+build/value_net.pt
 
 # OS / editor
 .DS_Store
@@ -22,3 +24,4 @@ build/position_visits.json
 __pycache__/
 .env
 .venv/
+venv/

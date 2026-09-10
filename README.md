@@ -9,7 +9,7 @@ A Settlers of Catan coaching engine: C++20 rules + eval + MCTS, with a local web
 - Legal-move engine with settlements, cities, roads, robber, maritime trade, and development cards
 - Heuristic evaluation + strategy bonuses (expand, awards, trades)
 - MCTS advice for your seat; imperfect one-ply opponents
-- Self-play training hooks (visit priors / eval weights)
+- Self-play training (C++ + optional PyTorch value-net export)
 - **Game recap** on finish — VP breakdown, board pieces, and why the game swung
 
 ## Requirements
@@ -17,6 +17,7 @@ A Settlers of Catan coaching engine: C++20 rules + eval + MCTS, with a local web
 - macOS or Linux
 - `clang++` (C++20) or compatible compiler
 - Python 3
+- Optional: PyTorch (`pip install -r ml/requirements.txt`) for value-net fitting after self-play
 
 ## Quick start
 
@@ -32,6 +33,20 @@ PYTHONUNBUFFERED=1 python3 web/server.py
 Then open `http://127.0.0.1:8765/` in your browser.
 
 Optional: `make ui` builds the bridge and starts the server.
+
+### Optional PyTorch training
+
+Play/advise never depends on PyTorch. If torch is installed, **Train** runs C++ self-play, then `ml/train_value.py` exports `build/eval_weights.json` (engine sanitizes weights on load). Without torch, C++ weights alone are kept.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r ml/requirements.txt
+./build/catan_train 200   # dumps build/train_samples.jsonl
+python3 ml/train_value.py
+```
+
+If you start the UI with the venv active, **Train** will run the PyTorch step automatically after self-play.
 
 ## Controls
 
@@ -49,12 +64,13 @@ Optional: `make ui` builds the bridge and starts the server.
 apps/          CLI bridge, train, advise, bench
 include/catan/ Public headers
 src/           Engine, eval, MCTS, strategy, visits
+ml/            Optional PyTorch value-net trainer
 web/           UI (server.py, app.js, index.html)
 build/         Objects, binaries, optional weights JSON
 ```
 
 ## Notes
-- `build/eval_weights.json` can be committed as a starting point; large `position_visits.json` is gitignored — regenerate via Train if you want memory.
+- `build/eval_weights.json` can be committed as a starting point; large `position_visits.json` / sample dumps are gitignored — regenerate via Train if you want memory.
 
 ## License
 
