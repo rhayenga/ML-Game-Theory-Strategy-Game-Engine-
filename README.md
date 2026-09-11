@@ -4,8 +4,8 @@ Local coaching engine for **Settlers of Catan**: a C++20 rules + strategy engine
 
 > Unofficial fan / research project — not affiliated with Catan Studio or Asmodee.
 
-**Project page:** [rhayenga.github.io/ML-Game-Theory-Strategy-Game-Engine-](https://rhayenga.github.io/ML-Game-Theory-Strategy-Game-Engine-/)  
-**Repo:** [github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine-](https://github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine-)
+**Project page:** [rhayenga.github.io/ML-Game-Theory-Strategy-Game-Engine](https://rhayenga.github.io/ML-Game-Theory-Strategy-Game-Engine/)  
+**Repo:** [github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine](https://github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine)
 
 ## What it does
 
@@ -27,15 +27,15 @@ Playing and advising use the C++ bridge. Training **requires** PyTorch.
 ## Quick start
 
 ```bash
-git clone https://github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine-.git
-cd ML-Game-Theory-Strategy-Game-Engine-
+git clone https://github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine.git
+cd ML-Game-Theory-Strategy-Game-Engine
 make -j4
 make ui
 ```
 
 `make ui` builds the bridge if needed, creates `.venv`, installs `ml/requirements.txt`, frees port **8765** if something else is bound, and starts the server.
 
-Open **http://127.0.0.1:8765/** in your browser.
+Open `http://127.0.0.1:8765/` in your browser (local server only).
 
 Manual start (after `make -j4` and a venv with PyTorch):
 
