@@ -2,8 +2,6 @@
 
 Local coaching engine for **Settlers of Catan**: a C++20 rules + strategy engine, MCTS move advice, PyTorch value-net training from self-play, and a browser UI to play and train on your machine.
 
-> Unofficial fan / research project — not affiliated with Catan Studio or Asmodee.
-
 **Project page:** [rhayenga.github.io/ML-Game-Theory-Strategy-Game-Engine](https://rhayenga.github.io/ML-Game-Theory-Strategy-Game-Engine/)  
 **Repo:** [github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine](https://github.com/rhayenga/ML-Game-Theory-Strategy-Game-Engine)
 
@@ -11,7 +9,7 @@ Local coaching engine for **Settlers of Catan**: a C++20 rules + strategy engine
 
 - Full legal-move engine (settlements, cities, roads, robber, harbors / maritime trade, development cards)
 - Heuristic evaluation plus strategy scoring (expansion, awards, trades, harbors)
-- **Find top 3** — MCTS search for your seat; softer one-ply bots for opponents
+- **Find top 3** — MCTS search for your seat; one-ply bots for opponents
 - **Train** — C++ self-play dumps position features; PyTorch fits a value net and writes `build/eval_weights.json` (plus visit memory for openings)
 - End-of-game **recap** (VP, board pieces, narrative of what swung the match)
 
